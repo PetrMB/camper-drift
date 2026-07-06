@@ -157,6 +157,7 @@ export class Road {
         const i = Math.floor(f), t = f - i;
         const A = this.samples[i], B = this.samples[Math.min(i + 1, n)];
         return {
+            x: lerp(A.x, B.x, t), z: lerp(A.z, B.z, t),
             y: lerp(A.y, B.y, t), slope: lerp(A.slope, B.slope, t),
             k: lerp(A.k, B.k, t), a: lerp(A.a, B.a, t),
         };
@@ -167,9 +168,9 @@ export class Road {
     slopeAt(s) { return this.samples.length ? this.lerpAt(s).slope : 0; }
     /** lat > 0 = vlevo (pevnina), lat < 0 = vpravo (moře) */
     pointAt(s, lat = 0, yOff = 0) {
-        const sm = this.sampleAt(s);
-        if (!sm) return new THREE.Vector3();
-        return new THREE.Vector3(sm.x + Math.cos(sm.a) * lat, sm.y + yOff, sm.z - Math.sin(sm.a) * lat);
+        if (!this.samples.length) return new THREE.Vector3();
+        const L = this.lerpAt(s);
+        return new THREE.Vector3(L.x + Math.cos(L.a) * lat, L.y + yOff, L.z - Math.sin(L.a) * lat);
     }
 
     _buildChunk() {

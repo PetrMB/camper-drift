@@ -318,8 +318,6 @@ class Game {
         stepPhysics(dt, (a, b) => this._contact(a, b));
         this.road.ensure(van.s);
         this.props.sync();
-        this.traffic.update(dt, van, this.road,
-            this.state === 'run' && van.state !== VanState.CRASHED && van.state !== VanState.FALLING);
 
         // proražení zídky u moře a pád z útesu
         if (this.state === 'run' && van.state !== VanState.CRASHED && van.state !== VanState.FALLING) {
@@ -461,6 +459,9 @@ class Game {
         this.ridges.update(van.s, this.camera.position, van.s);
         this.sea.update(this.t, van.s, this.camera.position, this.scene.fog);
         this.fleet.update(dt, this.t, van.s, this.road);
+        // provoz per-frame (ve fixním kroku by se auta vůči kameře cukala)
+        this.traffic.update(dt, van, this.road,
+            this.state === 'run' && van.state !== VanState.CRASHED && van.state !== VanState.FALLING);
         this.props.strobe(this.t);
         this.rig.update(real, van, this.timeScale);
         this.smoke.update(dt);
