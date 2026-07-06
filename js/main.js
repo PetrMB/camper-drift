@@ -77,6 +77,7 @@ class Game {
 
         // reset výchozí výšky vozu podle silnice
         this.van.visY = this.road.yAt(4);
+        this.van.snapNow();
         this.rig.snapTo(this.van);
 
         this._bindInput();
@@ -187,6 +188,7 @@ class Game {
         this.road.reset(Math.floor(Math.random() * 1e9));
         this.van.reset();
         this.van.visY = this.road.yAt(4);
+        this.van.snapNow();
         this.score.reset();
         this.tire.reset();
         this.fleet.reset();
@@ -453,6 +455,8 @@ class Game {
         }
 
         const van = this.van;
+        // interpolované vykreslení vozu mezi fyzikálními kroky (jinak cuká vůči kameře)
+        van.render(this.state === 'start' ? 1 : clamp(this.acc / FIXED, 0, 1), dt);
         this.env.update(van.s, van.pos, this.road);
         const sunDir = this.env.sun.position.clone().sub(this.env.sun.target.position).normalize();
         this.sky.update(van.s, this.camera.position, sunDir);

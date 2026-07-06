@@ -140,6 +140,10 @@ export class Van {
         this.fallVy = 0;
         this._splashed = false;
         this._pitchQ = new THREE.Quaternion();
+        // snapshoty posledních dvou fyzikálních kroků pro interpolované vykreslení
+        this._snapA = { x: 0, y: 0.95, z: 4, visY: 10, q: new THREE.Quaternion() };
+        this._snapB = { x: 0, y: 0.95, z: 4, visY: 10, q: new THREE.Quaternion() };
+        this._yawRate = 0;
     }
 
     reset() {
@@ -190,7 +194,7 @@ export class Van {
         this._t += dt;
         const held = input.drift;
         const steer = input.steer || 0;
-        if (this.state === VanState.CRASHED) { this.syncVisual(dt); return; }
+        if (this.state === VanState.CRASHED) { this._snapshot(); return; }
         if (this.state === VanState.FALLING) {
             if (!this._splashed) {
                 this.fallVy -= 9.81 * dt;
@@ -205,7 +209,7 @@ export class Van {
                 this.visY = Math.max(-1.7, this.visY - 0.8 * dt); // pomalé potopení
             }
             this.speed = Math.hypot(this.body.linvel().x, this.body.linvel().z);
-            this.syncVisual(dt);
+            this._snapshot();
             return;
         }
 
@@ -319,32 +323,48 @@ export class Van {
         this.speed = speedMag;
         this.dist += Math.max(0, vF) * dt;
 
-        this.syncVisual(dt, wNew);
+        this._snapshot(wNew);
     }
 
-    syncVisual(dt, yawRate = 0) {
-        const p = this.pos;
+    /** ulož stav fyzikálního kroku pro interpolované vykreslení */
+    _snapshot(yawRate = 0) {
+        const p = this.pos, q = this.body.rotation();
+        const A = this._snapA, B = this._snapB;
+        A.x = B.x; A.y = B.y; A.z = B.z; A.visY = B.visY; A.q.copy(B.q);
+        B.x = p.x; B.y = p.y; B.z = p.z; B.visY = this.visY; B.q.set(q.x, q.y, q.z, q.w);
+        this._yawRate = yawRate;
+    }
+
+    /** srovná oba snapshoty na aktuální stav (start / restart, žádné doklouzání) */
+    snapNow() {
+        this._snapshot(this._yawRate);
+        this._snapshot(this._yawRate);
+    }
+
+    /** per-frame vykreslení; alpha = poloha mezi posledními dvěma fyzikálními kroky */
+    render(alpha, dt) {
+        const A = this._snapA, B = this._snapB;
         // výška silnice je vizuální vrstva nad plochou fyzikou
-        this.mesh.position.set(p.x, p.y - 0.95 + this.visY, p.z);
-        const q = this.body.rotation();
-        this.mesh.quaternion.set(q.x, q.y, q.z, q.w);
+        this.mesh.position.set(
+            lerp(A.x, B.x, alpha),
+            lerp(A.y, B.y, alpha) - 0.95 + lerp(A.visY, B.visY, alpha),
+            lerp(A.z, B.z, alpha));
+        this.mesh.quaternion.copy(A.q).slerp(B.q, alpha);
         const wrecked = this.state === VanState.CRASHED || this.state === VanState.FALLING;
         if (!wrecked) {
             // sklon silnice -> podélný náklon celého vozu
             const pitch = -Math.atan(this.slope);
             this._pitchQ.setFromAxisAngle({ x: 1, y: 0, z: 0 }, pitch);
             this.mesh.quaternion.multiply(this._pitchQ);
-        }
 
-        if (!wrecked) {
             // náklon karoserie do smyku + houpání
             const slipRad = this.slipDeg * Math.PI / 180;
             const roll = clamp(-slipRad * 0.45, -0.16, 0.16) + Math.sin(this._t * 7) * 0.006 * clamp(this.vF / 20, 0, 1);
-            const pitch = clamp(-(this.braking ? 0.06 : 0) + yawRate * 0, -0.08, 0.05);
+            const pitchB = clamp(-(this.braking ? 0.06 : 0), -0.08, 0.05);
             this.bodyTilt.rotation.z += (roll - this.bodyTilt.rotation.z) * Math.min(1, dt * 8);
-            this.bodyTilt.rotation.x += (pitch - this.bodyTilt.rotation.x) * Math.min(1, dt * 6);
+            this.bodyTilt.rotation.x += (pitchB - this.bodyTilt.rotation.x) * Math.min(1, dt * 6);
             // kola
-            const steer = clamp(yawRate * 0.28, -0.45, 0.45);
+            const steer = clamp(this._yawRate * 0.28, -0.45, 0.45);
             for (const wgrp of this.wheels) {
                 wgrp.userData.spin.rotation.x += this.vF * dt / 0.36;
                 if (wgrp.userData.front) wgrp.rotation.y += (steer - wgrp.rotation.y) * Math.min(1, dt * 10);

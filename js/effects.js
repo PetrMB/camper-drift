@@ -144,7 +144,7 @@ export class CameraRig {
         this.pos.set(p.x - Math.sin(yaw) * CC.dist, (van.visY || 0) + CC.height, p.z - Math.cos(yaw) * CC.dist);
     }
     update(dt, van, timeScale) {
-        const yaw = van.yaw, p = van.pos;
+        const yaw = van.yaw, p = van.mesh.position; // interpolovaná pozice (bez cukání)
         const roadY = van.visY || 0;
         const sinY = Math.sin(yaw), cosY = Math.cos(yaw);
         const slip = van.slipDeg / 180 * Math.PI;
