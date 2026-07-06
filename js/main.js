@@ -131,8 +131,8 @@ class Game {
         const applyZones = () => {
             let s = 0, d = false;
             for (const z of zones.values()) {
-                if (z === 'left') s -= 1;
-                else if (z === 'right') s += 1;
+                if (z === 'left') s += 1;
+                else if (z === 'right') s -= 1;
                 else d = true;
             }
             this._touchSteer = clamp(s, -1, 1);
@@ -257,7 +257,7 @@ class Game {
     // ---------- herní logika (fixed step) ----------
     _step(dt) {
         const van = this.van;
-        const keySteer = (this._keys.right ? 1 : 0) - (this._keys.left ? 1 : 0);
+        const keySteer = (this._keys.left ? 1 : 0) - (this._keys.right ? 1 : 0);
         const steer = clamp(keySteer + this._touchSteer, -1, 1);
         const drift = (this.input.drift || this._touchDrift) && this.state === 'run';
         van.update(dt, { drift, steer: this.state === 'run' ? steer : 0 }, this.road);
