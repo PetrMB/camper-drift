@@ -5,6 +5,7 @@ import { initPhysics, stepPhysics } from './physics.js';
 import { Road } from './road.js';
 import { Van, VanState } from './van.js';
 import { WorldEnv, Props, Sea, Fleet, biomeMix } from './biomes.js';
+import { Traffic } from './traffic.js';
 import { setupRenderer, setupComposer, Sky, Ridges, CameraRig, Particles, TireMarks } from './effects.js';
 import { GameAudio } from './audio.js';
 import { Score } from './score.js';
@@ -35,6 +36,11 @@ class Game {
         });
         this.van = new Van(this.scene);
         this.van.onSpinout = () => this._onSpinout();
+        this.van.onSplash = () => this._splash();
+        this.traffic = new Traffic(this.scene, {
+            onHit: c => this._trafficHit(c),
+            onNearMiss: c => this._trafficNear(c),
+        });
         this.rig = new CameraRig(this.camera);
 
         const post = setupComposer(this.renderer, this.scene, this.camera, QUALITY);
@@ -65,6 +71,7 @@ class Game {
         this._smokeAlt = 0;
         this._wl = new THREE.Vector3(); this._wr = new THREE.Vector3();
         this._seg = null; this._segDrift = 0; this._segDirty = false;
+        this._prevLat = 0;
         this._wasTunnel = false;
         this._nextGull = 5 + Math.random() * 8;
 
@@ -183,9 +190,11 @@ class Game {
         this.score.reset();
         this.tire.reset();
         this.fleet.reset();
+        this.traffic.reset();
         this.rig.snapTo(this.van);
         this.timeScale = 1; this.slowmoT = 0; this.crashT = 0;
         this._seg = null; this._segDrift = 0; this._segDirty = false;
+        this._prevLat = 0;
         this.hud.setBest(this.score.best);
         this.hud.screen('run');
         this.state = 'run';
@@ -221,11 +230,56 @@ class Game {
         }
     }
 
+    // ---------- proražení zídky + pád do moře ----------
+    _smashRail() {
+        const p = this.van.pos, y = this.van.visY;
+        this.audio.railSmash();
+        this.props.breachWall(p.x, p.z, 4.5);
+        this.hud.vignettePulse();
+        for (let i = 0; i < 18; i++) {
+            const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 6;
+            this.smoke.spawn(p.x, y + 0.5, p.z,
+                Math.cos(a) * sp, 1 + Math.random() * 4, Math.sin(a) * sp,
+                0.6 + Math.random() * 0.4, 0.82, 0.78, 0.7);
+        }
+    }
+
+    _splash() {
+        this.audio.splash();
+        const p = this.van.pos;
+        for (let i = 0; i < 60; i++) {
+            const a = Math.random() * Math.PI * 2, sp = 1.5 + Math.random() * 6;
+            this.smoke.spawn(p.x + (Math.random() - 0.5) * 2, 0.3, p.z + (Math.random() - 0.5) * 2,
+                Math.cos(a) * sp, 3 + Math.random() * 7, Math.sin(a) * sp,
+                0.8 + Math.random() * 0.6, 0.75, 0.9, 0.95);
+        }
+        this.hud.popup('🌊 DO MOŘE!', 'bad', this.van.mesh.position, this.camera);
+        this.slowmoT = CONFIG.fx.slowmoTime;
+        this.crashT = 1.6;
+    }
+
+    // ---------- provoz ----------
+    _trafficHit(c) {
+        const van = this.van;
+        if (van.state === VanState.CRASHED || van.state === VanState.FALLING) return;
+        const rel = c.dir > 0 ? Math.abs(van.vF - c.speed) : van.vF + c.speed;
+        if (rel > CONFIG.physics.crashSpeed) this._crash();
+        else this.hud.vignettePulse();
+    }
+
+    _trafficNear(c) {
+        const pts = this.score.nearMiss();
+        this.audio.nearMiss();
+        this.hud.vignettePulse();
+        this.hud.popup(`TĚSNĚ! +${pts}`, 'near', new THREE.Vector3(c.x, this.van.visY + 1.5, c.z), this.camera);
+    }
+
     // ---------- kolize ----------
     _contact(a, b) {
         const pair = t => a.type === t ? a : b.type === t ? b : null;
         const van = pair('van');
         if (!van) return;
+        if (this.van.state === VanState.FALLING) return;
         const rock = pair('rock');
         const police = pair('police');
         const prop = pair('prop');
@@ -264,9 +318,23 @@ class Game {
         stepPhysics(dt, (a, b) => this._contact(a, b));
         this.road.ensure(van.s);
         this.props.sync();
+        this.traffic.update(dt, van, this.road,
+            this.state === 'run' && van.state !== VanState.CRASHED && van.state !== VanState.FALLING);
+
+        // proražení zídky u moře a pád z útesu
+        if (this.state === 'run' && van.state !== VanState.CRASHED && van.state !== VanState.FALLING) {
+            const P = CONFIG.physics;
+            if (van.lat < -P.railLat && this._prevLat >= -P.railLat) this._smashRail();
+            if (van.lat < -P.seaFallLat) {
+                const a = this.road.headingAt(van.s);
+                van.startFall(-Math.cos(a), Math.sin(a));
+                this.hud.popup('PŘES OKRAJ!', 'bad', van.mesh.position, this.camera);
+            }
+        }
+        this._prevLat = van.lat;
 
         if (this.state !== 'run') return;
-        if (van.state === VanState.CRASHED) return;
+        if (van.state === VanState.CRASHED || van.state === VanState.FALLING) return;
 
         const drifting = Math.abs(van.slipDeg) > CONFIG.score.slipMinDeg && !van.offroad && van.speed > 6;
 
@@ -419,7 +487,7 @@ class Game {
             clamp(van.speed / 28, 0, 1),
             clamp(Math.abs(van.slipDeg) / 35, 0, 1),
             this.timeScale,
-            this.state === 'run' && van.state !== VanState.CRASHED
+            this.state === 'run' && van.state !== VanState.CRASHED && van.state !== VanState.FALLING
         );
 
         this.composer.render();

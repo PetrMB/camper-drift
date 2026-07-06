@@ -150,10 +150,21 @@ export class Road {
     _idxOfS(s) { return clamp(Math.round((s - this.baseS) / STEP), 0, this.samples.length - 1); }
 
     sampleAt(s) { return this.samples[this._idxOfS(s)]; }
-    kappaAt(s) { const sm = this.sampleAt(s); return sm ? sm.k : 0; }
-    headingAt(s) { const sm = this.sampleAt(s); return sm ? sm.a : 0; }
-    yAt(s) { const sm = this.sampleAt(s); return sm ? sm.y : 10; }
-    slopeAt(s) { const sm = this.sampleAt(s); return sm ? sm.slope : 0; }
+    /** lineárně interpolované veličiny mezi 2m vzorky — bez schodů (plynulá jízda) */
+    lerpAt(s) {
+        const n = this.samples.length - 1;
+        const f = clamp((s - this.baseS) / STEP, 0, n);
+        const i = Math.floor(f), t = f - i;
+        const A = this.samples[i], B = this.samples[Math.min(i + 1, n)];
+        return {
+            y: lerp(A.y, B.y, t), slope: lerp(A.slope, B.slope, t),
+            k: lerp(A.k, B.k, t), a: lerp(A.a, B.a, t),
+        };
+    }
+    kappaAt(s) { return this.samples.length ? this.lerpAt(s).k : 0; }
+    headingAt(s) { return this.samples.length ? this.lerpAt(s).a : 0; }
+    yAt(s) { return this.samples.length ? this.lerpAt(s).y : 10; }
+    slopeAt(s) { return this.samples.length ? this.lerpAt(s).slope : 0; }
     /** lat > 0 = vlevo (pevnina), lat < 0 = vpravo (moře) */
     pointAt(s, lat = 0, yOff = 0) {
         const sm = this.sampleAt(s);
@@ -262,7 +273,9 @@ export class Road {
         const dx = px - sm.x, dz = pz - sm.z;
         const lat = dx * Math.cos(sm.a) - dz * Math.sin(sm.a);
         const along = dx * Math.sin(sm.a) + dz * Math.cos(sm.a);
-        return { s: sm.s + along, lat, heading: sm.a, kappa: sm.k, y: sm.y, slope: sm.slope };
+        const s = sm.s + along;
+        const L = this.lerpAt(s);
+        return { s, lat, heading: L.a, kappa: L.k, y: L.y, slope: L.slope };
     }
 
     segmentAt(s) {

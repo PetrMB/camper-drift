@@ -550,6 +550,21 @@ export class Props {
         this.byChunk.delete(chunkId);
     }
 
+    /** vizuální průraz zídky u moře — skryje instance kolem místa průrazu */
+    breachWall(x, z, r) {
+        const mesh = this.pools.wall.mesh;
+        const r2 = r * r;
+        let dirty = false;
+        for (let i = 0; i < mesh.count; i++) {
+            mesh.getMatrixAt(i, _m4);
+            const e = _m4.elements;
+            if (e[0] === 0 && e[5] === 0) continue; // ZERO matice = neaktivní instance
+            const dx = e[12] - x, dz = e[14] - z;
+            if (dx * dx + dz * dz < r2) { mesh.setMatrixAt(i, ZERO); dirty = true; }
+        }
+        if (dirty) mesh.instanceMatrix.needsUpdate = true;
+    }
+
     /** synchronizace barikád s fyzikou (+ výškový offset silnice) */
     sync() {
         let dirty = false;

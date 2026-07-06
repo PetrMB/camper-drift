@@ -17,6 +17,8 @@ Moderní Three.js + Rapier fyzika, vše běží přímo v prohlížeči bez buil
 - 🚧 **Policejní kontroly**: zátaras s blikajícím majákem a jednou mezerou.
   Proklouzni mezerou = +500 × kombo. **Náraz v rychlosti = konec jízdy!**
 - Drifty, čisté zatáčky a těsné míjení spadlých kamenů = body
+- 🚗 Na silnici je provoz — protijedoucí i pomalejší auta; těsné předjetí = body, náraz = konec
+- 💦 Prorazíš-li zídku u moře, vůz přeletí hranu útesu a šplouchne do vody
 - Silnice stoupá na útesy a klesá k pláži, vede tunely skrz ostrohy
 - Na moři plachetnice, rybářské čluny, jachty — a občas zahouká zaoceánský parník
 - Denní doba se plynule mění: poledne → západ slunce → noc → ráno
@@ -39,7 +41,7 @@ hra nezávisí na žádném CDN.
 ```
 index.html   style.css
 js/          config · main · physics · road · van · biomes (pobřeží) ·
-             effects · audio · score · hud
+             traffic · effects · audio · score · hud
 vendor/      three.module.js · jsm/ (postprocessing) · rapier3d-compat.js
 ```
 

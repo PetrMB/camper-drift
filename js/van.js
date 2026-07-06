@@ -106,7 +106,7 @@ export function buildHymercar() {
 }
 
 // ---------- controller ----------
-export const VanState = { GRIP: 0, DRIFT: 1, RECOVER: 2, SPINOUT: 3, CRASHED: 4 };
+export const VanState = { GRIP: 0, DRIFT: 1, RECOVER: 2, SPINOUT: 3, CRASHED: 4, FALLING: 5 };
 
 export class Van {
     constructor(scene) {
@@ -137,6 +137,8 @@ export class Van {
         this._t = 0;
         this.braking = false;
         this.dist = 0;
+        this.fallVy = 0;
+        this._splashed = false;
         this._pitchQ = new THREE.Quaternion();
     }
 
@@ -151,6 +153,7 @@ export class Van {
         this.driftSign = 0; this._pendT = 0; this._recoverT = 0; this._spinT = 0;
         this._offT = 0; this.offroad = false; this.dist = 0; this.slipDeg = 0; this.speed = 0;
         this.steerLat = 0; this.visY = 10; this.slope = 0;
+        this.fallVy = 0; this._splashed = false;
     }
 
     get yaw() {
@@ -168,12 +171,43 @@ export class Van {
         this.body.applyImpulse({ x: 0, y: 55, z: 0 }, true);
     }
 
+    /** utržení přes hranu útesu — vůz letí do moře; (outX,outZ) = jednotkový směr od silnice k moři */
+    startFall(outX, outZ) {
+        if (this.state === VanState.FALLING || this.state === VanState.CRASHED) return;
+        this.state = VanState.FALLING;
+        this.fallVy = 2.4;                     // malý odskok přes hranu
+        this._splashed = false;
+        if (this.body.setEnabledRotations) this.body.setEnabledRotations(true, true, true, true);
+        // zaruč odlet od stěny útesu (spodek stěny je dál v moři než hrana)
+        const v = this.body.linvel();
+        const out = v.x * outX + v.z * outZ;
+        if (out < 6) this.body.setLinvel({ x: v.x + outX * (6 - out), y: 0, z: v.z + outZ * (6 - out) }, true);
+        this.body.applyTorqueImpulse({ x: 25, y: (Math.random() - 0.5) * 30, z: -35 }, true);
+    }
+
     /** hlavní krok controlleru; input = {drift:boolean, steer:-1..1} */
     update(dt, input, road) {
         this._t += dt;
         const held = input.drift;
         const steer = input.steer || 0;
         if (this.state === VanState.CRASHED) { this.syncVisual(dt); return; }
+        if (this.state === VanState.FALLING) {
+            if (!this._splashed) {
+                this.fallVy -= 9.81 * dt;
+                this.visY += this.fallVy * dt;
+                if (this.visY <= 0.1) {
+                    this._splashed = true;
+                    const v = this.body.linvel();
+                    this.body.setLinvel({ x: v.x * 0.25, y: 0, z: v.z * 0.25 }, true); // voda zabrzdí
+                    if (this.onSplash) this.onSplash();
+                }
+            } else {
+                this.visY = Math.max(-1.7, this.visY - 0.8 * dt); // pomalé potopení
+            }
+            this.speed = Math.hypot(this.body.linvel().x, this.body.linvel().z);
+            this.syncVisual(dt);
+            return;
+        }
 
         const p = this.pos;
         const yaw = this.yaw;
@@ -294,14 +328,15 @@ export class Van {
         this.mesh.position.set(p.x, p.y - 0.95 + this.visY, p.z);
         const q = this.body.rotation();
         this.mesh.quaternion.set(q.x, q.y, q.z, q.w);
-        if (this.state !== VanState.CRASHED) {
+        const wrecked = this.state === VanState.CRASHED || this.state === VanState.FALLING;
+        if (!wrecked) {
             // sklon silnice -> podélný náklon celého vozu
             const pitch = -Math.atan(this.slope);
             this._pitchQ.setFromAxisAngle({ x: 1, y: 0, z: 0 }, pitch);
             this.mesh.quaternion.multiply(this._pitchQ);
         }
 
-        if (this.state !== VanState.CRASHED) {
+        if (!wrecked) {
             // náklon karoserie do smyku + houpání
             const slipRad = this.slipDeg * Math.PI / 180;
             const roll = clamp(-slipRad * 0.45, -0.16, 0.16) + Math.sin(this._t * 7) * 0.006 * clamp(this.vF / 20, 0, 1);

@@ -57,8 +57,24 @@ export const CONFIG = {
         spinoutSpeed: 8,
         crashSpeed: 6.5,      // m/s — náraz do tvrdé překážky nad tuto rychlost = konec
         barrierCrashSpeed: 11, // náraz do zátarasu nad tuto rychlost = konec (pomalý dotek = jen kombo)
-        railLat: 4.6,         // svodidlo u moře — odraz
-        railBounce: 6,        // boční impulz od svodidla
+        railLat: 4.6,         // zídka u moře — za ní průraz (FX)
+        seaFallLat: 6.1,      // za touto lat na straně moře vůz padá z útesu do moře
+    },
+
+    traffic: {
+        startS: 260,          // od kolika metrů se objevuje provoz
+        oncoming: 3,          // protijedoucí auta
+        same: 2,              // pomalejší auta ve směru jízdy
+        oncomingSpeed: [11, 16],  // m/s
+        sameSpeed: [13, 17],
+        laneOncoming: 2.3,    // lat protisměru (vlevo, pevnina)
+        laneSame: -2.1,       // lat pomalých aut (vpravo, u moře)
+        spawnAhead: [170, 420],
+        despawnBehind: 70,
+        cpClear: 60,          // odstup spawnu od policejních kontrol (m)
+        hitS: 3.1,            // kolizní polodélka
+        hitLat: 1.75,         // kolizní pološířka
+        nearMissLat: 2.4,     // těsné minutí (rozdíl lat)
     },
 
     score: {

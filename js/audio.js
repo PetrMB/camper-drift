@@ -173,4 +173,35 @@ export class GameAudio {
         src.start(t0); src.stop(t0 + 0.6);
         this._ding([80, 60], 0.5, 'sawtooth', 0.3);
     }
+
+    /** kratší tupý náraz — proražení zídky */
+    railSmash() {
+        if (!this.ready || this.muted) return;
+        const c = this.ctx, t0 = c.currentTime;
+        const src = c.createBufferSource(); src.buffer = this.noise.buffer;
+        const f = c.createBiquadFilter(); f.type = 'lowpass';
+        f.frequency.setValueAtTime(1600, t0); f.frequency.exponentialRampToValueAtTime(160, t0 + 0.22);
+        const g = c.createGain();
+        g.gain.setValueAtTime(0.4, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.26);
+        src.connect(f); f.connect(g); g.connect(this.master);
+        src.start(t0); src.stop(t0 + 0.3);
+    }
+
+    /** dopad do vody */
+    splash() {
+        if (!this.ready || this.muted) return;
+        const c = this.ctx, t0 = c.currentTime;
+        const src = c.createBufferSource(); src.buffer = this.noise.buffer;
+        const f = c.createBiquadFilter(); f.type = 'bandpass';
+        f.Q.value = 0.8;
+        f.frequency.setValueAtTime(900, t0);
+        f.frequency.exponentialRampToValueAtTime(2600, t0 + 0.12);
+        f.frequency.exponentialRampToValueAtTime(300, t0 + 0.9);
+        const g = c.createGain();
+        g.gain.setValueAtTime(0.001, t0);
+        g.gain.exponentialRampToValueAtTime(0.55, t0 + 0.06);
+        g.gain.exponentialRampToValueAtTime(0.001, t0 + 1.0);
+        src.connect(f); f.connect(g); g.connect(this.master);
+        src.start(t0); src.stop(t0 + 1.05);
+    }
 }
