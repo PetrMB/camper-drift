@@ -60,9 +60,8 @@ export class HUD {
 
     campResult(grade, pts, combo) {
         const el = this.el.result;
-        if (grade === 'perfect') { el.textContent = `⛺ PERFEKT! +${fmt(pts)}  ×${combo}`; el.className = 'camp-result perfect'; }
-        else if (grade === 'good') { el.textContent = `⛺ DOBRÝ! +${fmt(pts)}  ×${combo}`; el.className = 'camp-result good'; }
-        else { el.textContent = '⛺ UJELO TI TO — kombo ztraceno'; el.className = 'camp-result miss'; }
+        if (grade === 'clean') { el.textContent = `🚓 PROKLOUZL JSI! +${fmt(pts)}  ×${combo}`; el.className = 'camp-result perfect'; }
+        else { el.textContent = '🚧 ZÁTARAS SRAŽEN — kombo ztraceno'; el.className = 'camp-result miss'; }
         clearTimeout(this._resultT);
         this._resultT = setTimeout(() => el.classList.add('hidden'), 1400);
     }
@@ -99,10 +98,9 @@ export class HUD {
             <tr><td>Vzdálenost</td><td>${(score.dist / 1000).toFixed(2)} km</td></tr>
             <tr><td>Nejdelší drift</td><td>${Math.round(st.longestDrift)} m</td></tr>
             <tr><td>Čisté zatáčky</td><td>${st.cleanCorners}</td></tr>
-            <tr><td>Perfektní kempy</td><td>${st.perfectCamps}</td></tr>
-            <tr><td>Dobré kempy</td><td>${st.goodCamps}</td></tr>
+            <tr><td>Proklouznuté kontroly</td><td>${st.checkpoints}</td></tr>
             <tr><td>Těsné míjení</td><td>${st.nearMisses}</td></tr>
-            <tr><td>Sražené kužely</td><td>${st.props}</td></tr>
+            <tr><td>Sražené zátarasy</td><td>${st.props}</td></tr>
             <tr><td>Nejvyšší kombo</td><td>×${st.bestCombo}</td></tr>`;
         this.screen('over');
     }

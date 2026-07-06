@@ -16,7 +16,7 @@ export class Score {
         this.dist = 0;
         this.stats = {
             drifts: 0, longestDrift: 0, cleanCorners: 0,
-            nearMisses: 0, props: 0, perfectCamps: 0, goodCamps: 0, bestCombo: 1,
+            nearMisses: 0, props: 0, checkpoints: 0, bestCombo: 1,
         };
         this._driftAcc = 0;
         this._curDrift = 0;
@@ -68,20 +68,13 @@ export class Score {
         return p;
     }
 
-    camp(grade) {
-        if (grade === 'perfect') {
-            const p = S.campPerfect * this.combo;
+    /** průjezd policejní kontrolou: clean=true bez doteku zátarasu */
+    checkpoint(clean) {
+        if (clean) {
+            const p = S.checkpoint * this.combo;
             this.score += p;
             this.combo = Math.min(S.comboMax, this.combo + 1);
-            this.stats.perfectCamps++;
-            this.stats.bestCombo = Math.max(this.stats.bestCombo, this.combo);
-            return p;
-        }
-        if (grade === 'good') {
-            const p = S.campGood * this.combo;
-            this.score += p;
-            this.combo = Math.min(S.comboMax, this.combo + 1);
-            this.stats.goodCamps++;
+            this.stats.checkpoints++;
             this.stats.bestCombo = Math.max(this.stats.bestCombo, this.combo);
             return p;
         }

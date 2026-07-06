@@ -55,14 +55,16 @@ export function createRock(x, z, r, ref) {
 }
 
 export function createProp(kind, ref) {
-    // kužel / balík slámy — lehká dynamická tělesa, létají při nárazu
+    // barikáda apod. — lehká dynamická tělesa, létají při nárazu
     const bd = R.RigidBodyDesc.dynamic()
         .setTranslation(0, -50, 0) // parkoviště poolu
         .setLinearDamping(0.4).setAngularDamping(0.8)
         .setCanSleep(true);
     const body = world.createRigidBody(bd);
     let cd;
-    if (kind === 'cone') {
+    if (kind === 'barrier') {
+        cd = R.ColliderDesc.cuboid(0.78, 0.25, 0.12).setDensity(0.35);
+    } else if (kind === 'cone') {
         cd = R.ColliderDesc.cylinder(0.36, 0.22).setDensity(0.25);
     } else {
         cd = R.ColliderDesc.cuboid(0.55, 0.42, 0.55).setDensity(0.6);
@@ -71,6 +73,14 @@ export function createProp(kind, ref) {
     const col = world.createCollider(cd, body);
     tag(col, 'prop', ref);
     body.sleep();
+    return { body, col };
+}
+
+export function createPolice(x, z, ref) {
+    // policejní auto — statická tvrdá překážka (náraz = konec)
+    const body = world.createRigidBody(R.RigidBodyDesc.fixed().setTranslation(x, 0.9, z));
+    const col = world.createCollider(R.ColliderDesc.cuboid(1.0, 0.9, 2.3).setFriction(0.6), body);
+    tag(col, 'police', ref);
     return { body, col };
 }
 

@@ -1,4 +1,4 @@
-// Camper Drift: Euro Trip — všechny laditelné konstanty na jednom místě
+// Riviera Run — všechny laditelné konstanty na jednom místě
 
 export const CONFIG = {
     road: {
@@ -10,13 +10,19 @@ export const CONFIG = {
         edgeLine: 0.28,       // šířka krajnice
     },
 
+    elevation: {
+        min: 4,               // nejnižší výška silnice nad mořem
+        max: 22,              // nejvyšší (vrchol útesu)
+        maxGrade: 0.07,       // max sklon
+    },
+
     physics: {
         cruiseBase: 26,       // m/s základní tempomat
         cruiseBonusMax: 8,    // nárůst rychlosti s ujetou vzdáleností
         cruiseBonusPerKm: 1.6,
         accelGain: 1.4,
-        brakeTarget: 2.5,     // cílová rychlost při brzdném smyku
-        brakeGain: 2.8,
+        brakeTarget: 9,       // cílová rychlost při brzdném smyku na rovince
+        brakeGain: 2.2,
         cornerSlowK: 13,      // zpomalení podle křivosti před vozem
         cornerSlowMin: 0.8,
 
@@ -25,6 +31,9 @@ export const CONFIG = {
         gripLerp: 12,         // rychlost přechodu grip<->drift
 
         steerResponse: 9,     // lerp úhlové rychlosti
+        steerLatMax: 3.3,     // max boční ofset řízením (m)
+        steerLatLerp: 4.5,    // rychlost přesunu v pruhu
+        steerDriftBias: 1.4,  // vliv řízení na drift (rad/s při plném vychýlení)
         driftSteerMul: 2.6,   // o kolik víc se stáčí nos v driftu
         driftKappaMin: 0.015, // minimální "apex" křivost driftu
         kP: 3.2,              // PD sledování silnice
@@ -39,14 +48,17 @@ export const CONFIG = {
         hystTime: 0.15,
 
         fishtailFreq: 8.5,
-        fishtailAmp: 0.32,
+        fishtailAmp: 0.22,
 
         offroadLat: 5.4,
         offroadDrag: 0.42,
         offroadTime: 1.6,
         spinoutTime: 0.9,
         spinoutSpeed: 8,
-        crashSpeed: 6.5,      // m/s — náraz do balvanu nad tuto rychlost = konec
+        crashSpeed: 6.5,      // m/s — náraz do tvrdé překážky nad tuto rychlost = konec
+        barrierCrashSpeed: 11, // náraz do zátarasu nad tuto rychlost = konec (pomalý dotek = jen kombo)
+        railLat: 4.6,         // svodidlo u moře — odraz
+        railBounce: 6,        // boční impulz od svodidla
     },
 
     score: {
@@ -59,24 +71,37 @@ export const CONFIG = {
         nearMissSpeed: 15,
         nearMissDist: 2.6,
         prop: 10,
-        propRateCap: 5,         // max bodovaných propů za sekundu
-        campPerfect: 1000,
-        campGood: 400,
+        propRateCap: 5,
+        checkpoint: 500,        // čistý průjezd kontrolou
         comboMax: 8,
         distPerM: 1,
     },
 
-    camp: {
-        firstAt: 500,
-        spacing: 680,
+    checkpoint: {
+        firstAt: 450,
+        spacing: 650,
         spacingJitter: 120,
-        straightLen: 96,      // délka rovinky s kempem
-        zoneLen: 13,
-        zoneOffset: 52,       // kde v rovince zóna leží
-        stopSpeed: 0.6,
-        perfectDist: 2.2,
-        timeout: 6,
-        vanHalfLen: 2.3,
+        straightLen: 96,      // délka rovinky s kontrolou
+        offset: 55,           // kde v rovince zátaras stojí
+        gapHalf: 1.9,         // polovina šířky mezery
+        gapLats: [-2.5, 0, 2.5], // možné pozice mezery
+        barrierStep: 1.7,     // rozestup barikád
+    },
+
+    tunnel: {
+        chance: 0.3,          // šance vložení tunelu za zatáčkou (tier 2+)
+        lenMin: 44,
+        lenMax: 76,
+        lampStep: 10,
+    },
+
+    boats: {
+        sailboats: 3,
+        fishing: 2,
+        yacht: 1,
+        linerEvery: 2600,     // m — jak často připluje parník
+        latMin: -38,          // vzdálenost od silnice (záporná = strana moře)
+        latMax: -150,
     },
 
     cam: {
@@ -85,24 +110,25 @@ export const CONFIG = {
         lookAhead: 11,
         lookUp: 1.2,
         spring: 4.6,
+        ySpring: 5.5,
         fovBase: 62,
         fovSpeed: 14,
         fovDrift: 2,
         fovSlowmo: -8,
         shake: 0.14,
-        driftLag: 0.055,      // boční prodleva kamery při skluzu
+        driftLag: 0.055,
     },
 
     fx: {
         smokeCount: 224,
         confettiCount: 96,
         tireSegments: 360,
-        slowmoScale: 0.3,
-        slowmoTime: 0.55,     // reálné sekundy
+        slowmoScale: 0.35,
+        slowmoTime: 0.4,
     },
 
-    biomeLength: 2400,        // m na biom
-    biomeBlend: 220,          // m přechodové pásmo
+    dayLength: 2000,          // m na denní dobu
+    dayBlend: 260,            // m přechodové pásmo
 };
 
 export const IS_MOBILE =
@@ -110,8 +136,8 @@ export const IS_MOBILE =
     (navigator.maxTouchPoints > 1 || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent));
 
 export const QUALITY = IS_MOBILE
-    ? { pixelRatio: 1.5, shadow: 1024, bloomScale: 0.5, antialias: false, smoke: 128 }
-    : { pixelRatio: Math.min(window.devicePixelRatio || 1, 2), shadow: 2048, bloomScale: 1, antialias: true, smoke: 224 };
+    ? { pixelRatio: 1.5, shadow: 1024, bloomScale: 0.5, antialias: false, smoke: 128, seaSegs: 40 }
+    : { pixelRatio: Math.min(window.devicePixelRatio || 1, 2), shadow: 2048, bloomScale: 1, antialias: true, smoke: 224, seaSegs: 72 };
 
 export function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 export function lerp(a, b, t) { return a + (b - a) * t; }

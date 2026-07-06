@@ -126,6 +126,8 @@ export class Van {
         this.speed = 0;
         this.vF = 0;
         this.s = 0; this.lat = 0;
+        this.visY = 10; this.slope = 0;      // výška a sklon silnice (vizuální vrstva)
+        this.steerLat = 0;                   // cílový boční ofset od řízení
         this.driftSign = 0;
         this._pendSign = 0; this._pendT = 0;
         this._recoverT = 0;
@@ -135,6 +137,7 @@ export class Van {
         this._t = 0;
         this.braking = false;
         this.dist = 0;
+        this._pitchQ = new THREE.Quaternion();
     }
 
     reset() {
@@ -147,6 +150,7 @@ export class Van {
         this.grip = P.gripFactor;
         this.driftSign = 0; this._pendT = 0; this._recoverT = 0; this._spinT = 0;
         this._offT = 0; this.offroad = false; this.dist = 0; this.slipDeg = 0; this.speed = 0;
+        this.steerLat = 0; this.visY = 10; this.slope = 0;
     }
 
     get yaw() {
@@ -164,9 +168,11 @@ export class Van {
         this.body.applyImpulse({ x: 0, y: 55, z: 0 }, true);
     }
 
-    /** hlavní krok controlleru; proj = road.project(...), kAhead = křivost před vozem */
-    update(dt, held, road) {
+    /** hlavní krok controlleru; input = {drift:boolean, steer:-1..1} */
+    update(dt, input, road) {
         this._t += dt;
+        const held = input.drift;
+        const steer = input.steer || 0;
         if (this.state === VanState.CRASHED) { this.syncVisual(dt); return; }
 
         const p = this.pos;
@@ -175,6 +181,10 @@ export class Van {
 
         const proj = road.project(p.x, p.z);
         this.s = proj.s; this.lat = proj.lat;
+        this.visY = proj.y; this.slope = proj.slope;
+
+        // řízení: plynulý posun cílové stopy v pruhu
+        this.steerLat += (steer * P.steerLatMax - this.steerLat) * Math.min(1, P.steerLatLerp * dt);
         const look = Math.max(P.lookaheadMin, Math.abs(this.vF) * P.lookaheadT);
         const kAhead = road.kappaAt(this.s + look);
         const kNow = proj.kappa;
@@ -245,15 +255,18 @@ export class Van {
 
         // --- řízení (yaw rate) ---
         let yr;
+        const latErr = this.lat - this.steerLat; // odchylka od zvolené stopy
         if (this.state === VanState.SPINOUT) {
             yr = this.body.angvel().y * 0.98;
         } else if (this.state === VanState.DRIFT && !this.braking) {
             const mag = Math.max(Math.abs(kNow), Math.abs(kAhead), P.driftKappaMin);
             yr = this.driftSign * mag * Math.max(vF, 8) * P.driftSteerMul;
+            yr += steer * P.steerDriftBias * clamp(vF / 20, 0, 1); // řízení ovlivňuje smyk
         } else if (this.braking) {
             yr = kNow * vF + Math.sin(this._t * P.fishtailFreq) * P.fishtailAmp * clamp(vF / 15, 0, 1);
+            yr += steer * P.steerDriftBias * 0.8;
         } else {
-            const headingTarget = proj.heading + clamp(-this.lat * P.latCorr, -P.latCorrMax, P.latCorrMax);
+            const headingTarget = proj.heading + clamp(-latErr * P.latCorr, -P.latCorrMax, P.latCorrMax);
             const err = wrapAngle(headingTarget - yaw);
             yr = kNow * vF + P.kP * err;
             if (this.state === VanState.RECOVER) yr -= P.kSlip * slipRad;
@@ -277,9 +290,16 @@ export class Van {
 
     syncVisual(dt, yawRate = 0) {
         const p = this.pos;
-        this.mesh.position.set(p.x, p.y - 0.95, p.z);
+        // výška silnice je vizuální vrstva nad plochou fyzikou
+        this.mesh.position.set(p.x, p.y - 0.95 + this.visY, p.z);
         const q = this.body.rotation();
         this.mesh.quaternion.set(q.x, q.y, q.z, q.w);
+        if (this.state !== VanState.CRASHED) {
+            // sklon silnice -> podélný náklon celého vozu
+            const pitch = -Math.atan(this.slope);
+            this._pitchQ.setFromAxisAngle({ x: 1, y: 0, z: 0 }, pitch);
+            this.mesh.quaternion.multiply(this._pitchQ);
+        }
 
         if (this.state !== VanState.CRASHED) {
             // náklon karoserie do smyku + houpání
@@ -302,7 +322,7 @@ export class Van {
         const yaw = this.yaw, p = this.pos;
         const sinY = Math.sin(yaw), cosY = Math.cos(yaw);
         const bx = -sinY * 1.45, bz = -cosY * 1.45;
-        out0.set(p.x + bx + cosY * 0.92, 0.03, p.z + bz - sinY * 0.92);
-        out1.set(p.x + bx - cosY * 0.92, 0.03, p.z + bz + sinY * 0.92);
+        out0.set(p.x + bx + cosY * 0.92, this.visY + 0.06, p.z + bz - sinY * 0.92);
+        out1.set(p.x + bx - cosY * 0.92, this.visY + 0.06, p.z + bz + sinY * 0.92);
     }
 }

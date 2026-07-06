@@ -1,10 +1,10 @@
-// Camper Drift: Euro Trip — vstupní bod: bootstrap, herní smyčka, stavový automat
+// Riviera Run — vstupní bod: bootstrap, herní smyčka, stavový automat
 import * as THREE from 'three';
-import { CONFIG, QUALITY, IS_MOBILE, clamp, lerp } from './config.js';
+import { CONFIG, QUALITY, IS_MOBILE, clamp } from './config.js';
 import { initPhysics, stepPhysics } from './physics.js';
 import { Road } from './road.js';
 import { Van, VanState } from './van.js';
-import { WorldEnv, Props, biomeMix } from './biomes.js';
+import { WorldEnv, Props, Sea, Fleet, biomeMix } from './biomes.js';
 import { setupRenderer, setupComposer, Sky, Ridges, CameraRig, Particles, TireMarks } from './effects.js';
 import { GameAudio } from './audio.js';
 import { Score } from './score.js';
@@ -17,23 +17,25 @@ class Game {
         const canvas = document.getElementById('game');
         this.renderer = setupRenderer(canvas, QUALITY);
         this.scene = new THREE.Scene();
-        this.camera = new THREE.PerspectiveCamera(CONFIG.cam.fovBase, window.innerWidth / window.innerHeight, 0.1, 800);
+        this.camera = new THREE.PerspectiveCamera(CONFIG.cam.fovBase, window.innerWidth / window.innerHeight, 0.1, 900);
 
         await initPhysics();
 
+        this.audio = new GameAudio();
         this.env = new WorldEnv(this.scene, QUALITY);
         this.sky = new Sky(this.scene);
         this.ridges = new Ridges(this.scene);
+        this.sea = new Sea(this.scene, QUALITY);
         this.props = new Props(this.scene);
+        this.fleet = new Fleet(this.scene, () => this.audio.shipHorn());
         this.road = new Road(this.scene, {
             onChunkProps: (chunk, road) => this.props.populate(chunk, road),
             onChunkRelease: id => this.props.releaseChunk(id),
-            onCampZone: (zone, chunk, road) => this.props.campVisual(zone, road, chunk.id),
+            onCheckpoint: (cp, chunk, road) => this.props.buildCheckpoint(cp, chunk, road),
         });
         this.van = new Van(this.scene);
         this.van.onSpinout = () => this._onSpinout();
         this.rig = new CameraRig(this.camera);
-        this.rig.snapTo(this.van);
 
         const post = setupComposer(this.renderer, this.scene, this.camera, QUALITY);
         this.composer = post.composer;
@@ -43,63 +45,108 @@ class Game {
         this.confetti = new Particles(this.scene, CONFIG.fx.confettiCount, 0.5, { opacity: 0.95, gravity: -7 });
         this.tire = new TireMarks(this.scene, CONFIG.fx.tireSegments);
 
-        this.audio = new GameAudio();
         this.score = new Score();
         this.hud = new HUD();
         this.hud.setBest(this.score.best);
         this.hud.screen('start');
 
         this.state = 'start';       // start | run | over
-        this.held = false;
+        this.input = { drift: false, steer: 0 };
+        this._keys = { left: false, right: false };
+        this._touchSteer = 0;
+        this._touchDrift = false;
         this.timeScale = 1;
         this.slowmoT = 0;
         this.crashT = 0;
         this.overGuard = 0;
         this.acc = 0;
+        this.t = 0;
         this.last = performance.now();
         this._smokeAlt = 0;
         this._wl = new THREE.Vector3(); this._wr = new THREE.Vector3();
-        // sledování zatáček (čistá zatáčka)
         this._seg = null; this._segDrift = 0; this._segDirty = false;
+        this._wasTunnel = false;
+        this._nextGull = 5 + Math.random() * 8;
+
+        // reset výchozí výšky vozu podle silnice
+        this.van.visY = this.road.yAt(4);
+        this.rig.snapTo(this.van);
 
         this._bindInput();
         this._bindResize();
         const params = new URLSearchParams(location.search);
         if (params.has('debug')) this._debugPanel();
         if (params.has('autotest')) {
-            // headless smoke-test: auto start + periodický drift
+            window.__game = this;
+            window.__tp = (s, lat = 0) => {   // testovací teleport na s-pozici
+                const p = this.road.pointAt(s, lat);
+                this.road._projIdx = this.road._idxOfS(s);
+                this.van.body.setTranslation({ x: p.x, y: 0.95, z: p.z }, true);
+                const a = this.road.headingAt(s);
+                this.van.body.setRotation({ x: 0, y: Math.sin(a / 2), z: 0, w: Math.cos(a / 2) }, true);
+                this.van.visY = this.road.yAt(s);
+                this.rig.snapTo(this.van);
+            };
             setTimeout(() => this._startRun(), 800);
-            setInterval(() => { this.held = !this.held; }, 1600);
         }
 
-        // idle náhled prostředí i v menu
-        this.env.update(0, this.van.pos);
-        this.sky.update(0, this.camera.position, this.env.sun.position.clone().normalize());
-
+        this.env.update(0, this.van.pos, this.road);
         requestAnimationFrame(t => this._frame(t));
     }
 
     // ---------- vstup ----------
     _bindInput() {
-        const down = e => {
-            if (e.target.closest && e.target.closest('.no-drive')) return;
+        const start = () => {
             this.audio.unlock();
-            if (this.state === 'start') { this._startRun(); return; }
+            if (this.state === 'start') { this._startRun(); return true; }
             if (this.state === 'over') {
                 if (performance.now() - this.overGuard > 500) this._restart();
-                return;
+                return true;
             }
-            this.held = true;
+            return false;
         };
-        const up = () => { this.held = false; };
-        window.addEventListener('pointerdown', down);
-        window.addEventListener('pointerup', up);
-        window.addEventListener('pointercancel', up);
+
+        // klávesnice
         window.addEventListener('keydown', e => {
             if (e.repeat) return;
-            if (e.code === 'Space') { e.preventDefault(); down(e); }
+            if (e.code === 'Space') { e.preventDefault(); if (!start()) this.input.drift = true; }
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') this._keys.left = true;
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') this._keys.right = true;
+            if ((e.code === 'ArrowLeft' || e.code === 'ArrowRight' || e.code === 'KeyA' || e.code === 'KeyD')) start();
         });
-        window.addEventListener('keyup', e => { if (e.code === 'Space') up(); });
+        window.addEventListener('keyup', e => {
+            if (e.code === 'Space') this.input.drift = false;
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') this._keys.left = false;
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') this._keys.right = false;
+        });
+
+        // dotyk/myš: levá & pravá třetina = řízení, prostředek = drift
+        const zones = new Map(); // pointerId -> 'left'|'right'|'drift'
+        const zoneOf = x => {
+            const w = window.innerWidth;
+            if (x < w * 0.36) return 'left';
+            if (x > w * 0.64) return 'right';
+            return 'drift';
+        };
+        const applyZones = () => {
+            let s = 0, d = false;
+            for (const z of zones.values()) {
+                if (z === 'left') s -= 1;
+                else if (z === 'right') s += 1;
+                else d = true;
+            }
+            this._touchSteer = clamp(s, -1, 1);
+            this._touchDrift = d;
+        };
+        window.addEventListener('pointerdown', e => {
+            if (e.target.closest && e.target.closest('.no-drive')) return;
+            if (start()) return;
+            zones.set(e.pointerId, zoneOf(e.clientX));
+            applyZones();
+        });
+        const drop = e => { zones.delete(e.pointerId); applyZones(); };
+        window.addEventListener('pointerup', drop);
+        window.addEventListener('pointercancel', drop);
 
         const mute = document.getElementById('btn-mute');
         mute.textContent = this.audio.muted ? '🔇' : '🔊';
@@ -125,22 +172,24 @@ class Game {
     _startRun() {
         this.state = 'run';
         this.hud.screen('run');
-        this.held = false;
+        this.input.drift = false;
     }
 
     _restart() {
         this.props.releaseAll();
         this.road.reset(Math.floor(Math.random() * 1e9));
         this.van.reset();
+        this.van.visY = this.road.yAt(4);
         this.score.reset();
         this.tire.reset();
+        this.fleet.reset();
         this.rig.snapTo(this.van);
         this.timeScale = 1; this.slowmoT = 0; this.crashT = 0;
         this._seg = null; this._segDrift = 0; this._segDirty = false;
         this.hud.setBest(this.score.best);
         this.hud.screen('run');
         this.state = 'run';
-        this.held = false;
+        this.input.drift = false;
     }
 
     _gameOver() {
@@ -156,11 +205,10 @@ class Game {
         this.van.crash();
         this.audio.crash();
         this.crashT = 1.7;
-        // prachová exploze
-        const p = this.van.pos;
+        const p = this.van.pos, y = this.van.visY;
         for (let i = 0; i < 40; i++) {
             const a = Math.random() * Math.PI * 2, sp = 3 + Math.random() * 9;
-            this.smoke.spawn(p.x, 0.6 + Math.random(), p.z,
+            this.smoke.spawn(p.x, y + 0.6 + Math.random(), p.z,
                 Math.cos(a) * sp, 2 + Math.random() * 5, Math.sin(a) * sp,
                 0.9 + Math.random() * 0.5, 0.45, 0.4, 0.36);
         }
@@ -175,12 +223,15 @@ class Game {
 
     // ---------- kolize ----------
     _contact(a, b) {
-        const pair = (t) => a.type === t ? a : b.type === t ? b : null;
+        const pair = t => a.type === t ? a : b.type === t ? b : null;
         const van = pair('van');
         if (!van) return;
         const rock = pair('rock');
+        const police = pair('police');
         const prop = pair('prop');
-        if (rock) {
+        if (police) {
+            if (this.van.state !== VanState.CRASHED) this._crash();
+        } else if (rock) {
             rock.ref.hit = true;
             if (this.van.speed > CONFIG.physics.crashSpeed && this.van.state !== VanState.CRASHED) {
                 this._crash();
@@ -189,14 +240,16 @@ class Game {
             }
         } else if (prop && this.state === 'run') {
             const e = prop.ref;
+            if (e && e.cp && e.cp.state === 'pending') e.cp.dirty = true;
             if (e && !e.scored) {
                 e.scored = true;
-                const pts = this.score.prop(performance.now() / 1000);
-                if (pts > 0) {
-                    this.audio.prop();
-                    const t = e.ph.body.translation();
-                    this.hud.popup(`+${pts}`, 'prop', new THREE.Vector3(t.x, 1.2, t.z), this.camera);
-                }
+                this.hud.vignettePulse();
+                const t = e.ph.body.translation();
+                this.hud.popup('🚧', 'bad', new THREE.Vector3(t.x, (e.yOff || 0) + 1.2, t.z), this.camera);
+            }
+            // náraz do zátarasu v rychlosti = konec jízdy (barikády přitom odletí)
+            if (this.van.speed > CONFIG.physics.barrierCrashSpeed && this.van.state !== VanState.CRASHED) {
+                this._crash();
             }
         }
     }
@@ -204,7 +257,10 @@ class Game {
     // ---------- herní logika (fixed step) ----------
     _step(dt) {
         const van = this.van;
-        van.update(dt, this.held && this.state === 'run', this.road);
+        const keySteer = (this._keys.right ? 1 : 0) - (this._keys.left ? 1 : 0);
+        const steer = clamp(keySteer + this._touchSteer, -1, 1);
+        const drift = (this.input.drift || this._touchDrift) && this.state === 'run';
+        van.update(dt, { drift, steer: this.state === 'run' ? steer : 0 }, this.road);
         stepPhysics(dt, (a, b) => this._contact(a, b));
         this.road.ensure(van.s);
         this.props.sync();
@@ -214,18 +270,16 @@ class Game {
 
         const drifting = Math.abs(van.slipDeg) > CONFIG.score.slipMinDeg && !van.offroad && van.speed > 6;
 
-        // skóre za drift + vzdálenost
         this.score.driftTick(dt, drifting, van.speed);
         this.score.distance(Math.max(0, van.vF) * dt);
 
-        // kouř / prach
         this._smokeAlt ^= 1;
         if ((drifting || van.offroad) && van.speed > 6 && this._smokeAlt) {
             van.rearWheelPos(this._wl, this._wr);
             const off = van.offroad;
             const [r, g, b] = off ? [0.55, 0.47, 0.35] : [0.88, 0.88, 0.9];
             for (const w of [this._wl, this._wr]) {
-                this.smoke.spawn(w.x, 0.25, w.z,
+                this.smoke.spawn(w.x, w.y + 0.2, w.z,
                     (Math.random() - 0.5) * 2, 1.2 + Math.random() * 1.5, (Math.random() - 0.5) * 2,
                     0.55 + Math.random() * 0.35, r, g, b);
             }
@@ -235,13 +289,12 @@ class Game {
 
         this._corners(dt, drifting);
         this._nearMiss();
-        this._camps(dt);
+        this._checkpoints(dt);
     }
 
     _corners(dt, drifting) {
         const seg = this.road.segmentAt(this.van.s);
         if (seg !== this._seg) {
-            // vyhodnocení opuštěné zatáčky
             if (this._seg && (this._seg.type === 'CORNER' || this._seg.type === 'HAIRPIN')
                 && this._segDrift >= CONFIG.score.cleanCornerMinDrift && !this._segDirty) {
                 const pts = this.score.cleanCorner();
@@ -259,66 +312,48 @@ class Game {
         for (const rock of this.props.rocks) {
             if (rock.nearAwarded || rock.hit) continue;
             const d = Math.hypot(p.x - rock.x, p.z - rock.z);
-            if (d < (rock.minD ?? 1e9)) rock.minD = d;
+            if (d < rock.minD) rock.minD = d;
             if (van.s > rock.s + 4) {
                 rock.nearAwarded = true;
                 if (rock.minD < rock.r + CONFIG.score.nearMissDist && van.speed > CONFIG.score.nearMissSpeed) {
                     const pts = this.score.nearMiss();
                     this.audio.nearMiss();
                     this.hud.vignettePulse();
-                    this.hud.popup(`TĚSNĚ! +${pts}`, 'near', new THREE.Vector3(rock.x, 1.5, rock.z), this.camera);
+                    this.hud.popup(`TĚSNĚ! +${pts}`, 'near', new THREE.Vector3(rock.x, this.van.visY + 1.5, rock.z), this.camera);
                 }
             }
         }
     }
 
-    _camps(dt) {
-        const C = CONFIG.camp;
+    _checkpoints(dt) {
         const van = this.van;
-        const zone = this.road.nextZone(van.s);
-        if (!zone) { this.hud.campBanner(null); return; }
+        const cp = this.road.nextCheckpoint(van.s);
+        if (!cp) { this.hud.campBanner(null); return; }
 
-        const distTo = zone.s0 - van.s;
-        this.hud.campBanner(distTo < 300 ? Math.max(0, distTo) : null);
+        const distTo = cp.s - van.s;
+        this.hud.campBanner(distTo < 300 && distTo > -5 ? Math.max(0, distTo) : null);
 
-        if (van.s > zone.s0 - 2) { zone.entered = true; }
-        if (zone.entered) zone.enterT += dt;
-
-        const back = van.s - C.vanHalfLen, front = van.s + C.vanHalfLen;
-        const stopped = van.speed < C.stopSpeed && van.s > zone.s0 - C.vanHalfLen;
-
-        let grade = null;
-        if (stopped) {
-            const inside = back >= zone.s0 && front <= zone.s1 && Math.abs(van.lat) < CONFIG.road.width / 2;
-            if (inside && Math.abs(van.s - zone.sc) <= C.perfectDist) grade = 'perfect';
-            else if (inside) grade = 'good';
-            else grade = 'miss';
-        } else if (van.s > zone.s1 + 10) {
-            grade = 'miss';
-        } else if (zone.entered && zone.enterT > C.timeout) {
-            grade = 'miss';
-        }
-        if (!grade) return;
-
-        zone.state = 'done';
-        const hadCombo = this.score.combo > 1;
-        const pts = this.score.camp(grade);
-        this.hud.campResult(grade, pts, this.score.combo);
-        if (grade === 'perfect') {
-            this.audio.campPerfect(this.score.combo);
-            this.slowmoT = CONFIG.fx.slowmoTime;
-            const c = this.road.pointAt(zone.sc, 0);
-            for (let i = 0; i < 70; i++) {
-                const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 6;
-                this.confetti.spawn(c.x, 1 + Math.random(), c.z,
-                    Math.cos(a) * sp, 4 + Math.random() * 6, Math.sin(a) * sp,
-                    1 + Math.random() * 0.8,
-                    0.4 + Math.random() * 0.6, 0.4 + Math.random() * 0.6, 0.4 + Math.random() * 0.6);
+        // vyhodnocení po průjezdu linií zátarasu
+        if (van.s > cp.s + 3) {
+            cp.state = 'done';
+            const clean = !cp.dirty;
+            const hadCombo = this.score.combo > 1;
+            const pts = this.score.checkpoint(clean);
+            this.hud.campResult(clean ? 'clean' : 'dirty', pts, this.score.combo);
+            if (clean) {
+                this.audio.whoop();
+                this.slowmoT = CONFIG.fx.slowmoTime;
+                const c = this.road.pointAt(cp.s, cp.gapLat);
+                for (let i = 0; i < 50; i++) {
+                    const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 5;
+                    this.confetti.spawn(c.x, c.y + 1, c.z,
+                        Math.cos(a) * sp, 3 + Math.random() * 5, Math.sin(a) * sp,
+                        0.8 + Math.random() * 0.7,
+                        0.4 + Math.random() * 0.6, 0.4 + Math.random() * 0.6, 0.4 + Math.random() * 0.6);
+                }
+            } else if (hadCombo) {
+                this.audio.comboLost();
             }
-        } else if (grade === 'good') {
-            this.audio.campGood();
-        } else {
-            if (hadCombo) this.audio.comboLost();
         }
     }
 
@@ -327,8 +362,8 @@ class Game {
         requestAnimationFrame(t => this._frame(t));
         let real = Math.min(0.05, (now - this.last) / 1000);
         this.last = now;
+        this.t += real;
 
-        // slow-mo
         if (this.slowmoT > 0) {
             this.slowmoT -= real;
             this.timeScale = CONFIG.fx.slowmoScale;
@@ -346,26 +381,39 @@ class Game {
             }
         }
 
-        // crash sekvence
         if (this.crashT > 0) {
             this.crashT -= real;
             if (this.crashT <= 0 && this.state === 'run') this._gameOver();
         }
 
-        // prostředí + kamera + částice
         const van = this.van;
-        this.env.update(van.s, van.pos);
+        this.env.update(van.s, van.pos, this.road);
         const sunDir = this.env.sun.position.clone().sub(this.env.sun.target.position).normalize();
         this.sky.update(van.s, this.camera.position, sunDir);
         this.ridges.update(van.s, this.camera.position, van.s);
+        this.sea.update(this.t, van.s, this.camera.position, this.scene.fog);
+        this.fleet.update(dt, this.t, van.s, this.road);
+        this.props.strobe(this.t);
         this.rig.update(real, van, this.timeScale);
         this.smoke.update(dt);
         this.confetti.update(dt);
 
-        // HUD + zvuk
+        // tunelová akustika
+        const inTunnel = this.road.inTunnel(van.s);
+        if (inTunnel !== this._wasTunnel) {
+            this._wasTunnel = inTunnel;
+            this.audio.tunnel(inTunnel);
+        }
+        // racci (jen venku)
+        this._nextGull -= real;
+        if (this._nextGull <= 0) {
+            this._nextGull = 8 + Math.random() * 9;
+            if (!inTunnel && this.state !== 'over') this.audio.gull();
+        }
+
         if (this.state === 'run') {
             const bio = biomeMix(van.s).a;
-            this.hud.update(this.score, van, `${bio.emoji} ${bio.name}`);
+            this.hud.update(this.score, van, `${bio.emoji} ${bio.name} · POBŘEŽÍ`);
         }
         this.audio.drive(
             clamp(van.speed / 28, 0, 1),
@@ -380,7 +428,7 @@ class Game {
     // ---------- debug panel ----------
     _debugPanel() {
         const P = CONFIG.physics;
-        const keys = ['cruiseBase', 'driftSteerMul', 'driftFactor', 'gripFactor', 'steerResponse', 'kP', 'brakeGain'];
+        const keys = ['cruiseBase', 'driftSteerMul', 'driftFactor', 'gripFactor', 'steerLatMax', 'steerDriftBias', 'kP'];
         const box = document.createElement('div');
         box.className = 'no-drive';
         box.style.cssText = 'position:fixed;left:8px;top:80px;z-index:50;background:rgba(0,0,0,.7);color:#fff;padding:10px;font:11px monospace;border-radius:8px';
@@ -400,7 +448,7 @@ class Game {
         box.appendChild(info);
         document.body.appendChild(box);
         setInterval(() => {
-            info.textContent = `calls:${this.renderer.info.render.calls} slip:${this.van.slipDeg.toFixed(0)}° s:${this.van.s.toFixed(0)}`;
+            info.textContent = `calls:${this.renderer.info.render.calls} slip:${this.van.slipDeg.toFixed(0)}° s:${this.van.s.toFixed(0)} y:${this.van.visY.toFixed(1)}`;
         }, 500);
     }
 }

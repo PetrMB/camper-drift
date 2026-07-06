@@ -1,42 +1,45 @@
-// Procedurální silnice: segmentová gramatika -> vzorky centerline -> recyklované chunky
+// Pobřežní silnice na útesu: segmentová gramatika s výškovým profilem,
+// tunely, policejní kontroly, recyklované chunky (silnice + útes + pevnina)
 import * as THREE from 'three';
-import { CONFIG, clamp, makeRng, wrapAngle } from './config.js';
+import { CONFIG, clamp, lerp, makeRng } from './config.js';
 
 const RC = CONFIG.road;
+const EL = CONFIG.elevation;
+const CP = CONFIG.checkpoint;
+const TU = CONFIG.tunnel;
 const STEP = RC.sampleStep;
 const HALF = RC.width / 2;
 
 export class Road {
     /**
-     * @param scene THREE.Scene
-     * @param hooks { onChunkProps(chunk), onChunkRelease(chunkId), onCampZone(zone) }
+     * hooks: { onChunkProps(chunk, road), onChunkRelease(chunkId), onCheckpoint(cp, chunk, road) }
      */
     constructor(scene, hooks) {
         this.scene = scene;
         this.hooks = hooks || {};
         this.asphalt = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
         this.lineMat = new THREE.MeshBasicMaterial({ color: 0xf5f2e8 });
-        this.zoneMat = new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.85 });
+        this.landMat = new THREE.MeshStandardMaterial({ color: 0x9dbb6a, roughness: 1 });
+        this.cliffMat = new THREE.MeshStandardMaterial({ color: 0xb09a80, roughness: 1, flatShading: true });
+        this.foamMat = new THREE.MeshBasicMaterial({ color: 0xf0f8f5, transparent: true, opacity: 0.85 });
         this.reset(1234567);
     }
 
     reset(seed) {
-        // úklid staré geometrie
         if (this.chunks) for (const c of this.chunks) this._disposeChunk(c);
         this.rng = makeRng(seed);
-        this.samples = [];        // {x,z,a,k,s} — a=heading, k=křivost
-        this.baseS = 0;           // s prvního vzorku v poli
+        this.samples = [];        // {x,y,z,a,k,s,slope}
+        this.baseS = 0;
         this.segments = [];       // {type,s0,s1,k}
-        this.chunks = [];         // {id, s0, s1, meshes[], i0}
+        this.chunks = [];
         this.chunkId = 0;
-        this.campZones = [];      // {s0,s1,sc,state:'pending'|'done'|'missed', meshes[]}
-        this.nextCampS = CONFIG.camp.firstAt;
+        this.checkpoints = [];    // {s, gapLat, state, dirty, built}
+        this.nextCpS = CP.firstAt;
         this._genX = 0; this._genZ = 0; this._genA = 0; this._genS = 0;
-        this._lastDir = 1;
-        this._pendCamp = false;
+        this._genY = 10; this._lastDir = 1;
+        this._pendCp = false;
         this._projIdx = 0;
-        // první vzorek
-        this._pushSample(0);
+        this._pushSample(0, 0);
         this.ensure(0);
     }
 
@@ -50,62 +53,66 @@ export class Road {
 
     _nextSegment() {
         const s = this._genS;
-        // vynucená kempová rovinka?
-        if (this._pendCamp) {
-            this._pendCamp = false;
-            const len = CONFIG.camp.straightLen;
-            const seg = { type: 'CAMP', k: 0, len };
-            this._scheduleCampZone(s);
-            return seg;
+        if (this._pendCp) {
+            this._pendCp = false;
+            this.checkpoints.push({
+                s: s + CP.offset, gapLat: CP.gapLats[Math.floor(this.rng() * CP.gapLats.length)],
+                state: 'pending', dirty: false, built: false, announced: false,
+            });
+            return { type: 'CHECKPOINT', k: 0, len: CP.straightLen, dY: 0 };
         }
-        if (s >= this.nextCampS) {
-            this._pendCamp = true; // po této zatáčce přijde kemp
-            this.nextCampS = s + CONFIG.camp.spacing + (this.rng() - 0.5) * 2 * CONFIG.camp.spacingJitter;
+        if (s >= this.nextCpS) {
+            this._pendCp = true;
+            this.nextCpS = s + CP.spacing + (this.rng() - 0.5) * 2 * CP.spacingJitter;
             const dir = -this._lastDir; this._lastDir = dir;
-            return { type: 'CORNER', k: dir * (1 / 45), len: 70, ramp: true };
+            return { type: 'CORNER', k: dir * (1 / 45), len: 70, ramp: true, dY: this._pickDY(70) };
         }
         const t = this._tier(s);
+        // tunel skrz ostroh
+        if (t >= 1 && this.rng() < TU.chance * 0.35) {
+            const len = TU.lenMin + this.rng() * (TU.lenMax - TU.lenMin);
+            return { type: 'TUNNEL', k: (this.rng() - 0.5) * 0.006, len, dY: 0 };
+        }
         const maxK = [1 / 60, 1 / 38, 1 / 26, 1 / 18][t];
         const straightShare = [0.45, 0.3, 0.2, 0.15][t];
         const r = this.rng();
         if (r < straightShare) {
-            return { type: 'STRAIGHT', k: 0, len: 40 + this.rng() * 80 };
+            const len = 40 + this.rng() * 80;
+            return { type: 'STRAIGHT', k: 0, len, dY: this._pickDY(len) };
         }
-        // směr: 60/40 alternace => serpentiny
         const dir = this.rng() < 0.6 ? -this._lastDir : this._lastDir;
         this._lastDir = dir;
         if (t >= 3 && this.rng() < 0.15) {
-            return { type: 'HAIRPIN', k: dir * maxK, len: 45 + this.rng() * 25, ramp: true };
+            const len = 45 + this.rng() * 25;
+            return { type: 'HAIRPIN', k: dir * maxK, len, ramp: true, dY: this._pickDY(len) * 0.5 };
         }
         const k = dir * (0.35 + this.rng() * 0.65) * maxK;
-        return { type: 'CORNER', k, len: 50 + this.rng() * 90, ramp: true };
+        const len = 50 + this.rng() * 90;
+        return { type: 'CORNER', k, len, ramp: true, dY: this._pickDY(len) };
     }
 
-    _scheduleCampZone(campSegStart) {
-        const s0 = campSegStart + CONFIG.camp.zoneOffset;
-        const zone = {
-            s0, s1: s0 + CONFIG.camp.zoneLen,
-            sc: s0 + CONFIG.camp.zoneLen / 2,
-            state: 'pending', entered: false, enterT: 0, meshes: [],
-        };
-        this.campZones.push(zone);
+    _pickDY(len) {
+        // náhodné převýšení v mezích sklonu a výškového pásma
+        const maxD = EL.maxGrade * len;
+        let dY = (this.rng() - 0.5) * 2 * maxD;
+        dY = clamp(dY, EL.min - this._genY, EL.max - this._genY);
+        return dY;
     }
 
-    _pushSample(k) {
-        this.samples.push({ x: this._genX, z: this._genZ, a: this._genA, k, s: this._genS });
+    _pushSample(k, slope) {
+        this.samples.push({ x: this._genX, y: this._genY, z: this._genZ, a: this._genA, k, s: this._genS, slope });
     }
 
-    // generuj vzorky, dokud nepokryjeme s
     _genUpTo(sTarget) {
         while (this._genS < sTarget) {
             const seg = this._nextSegment();
             const n = Math.max(2, Math.round(seg.len / STEP));
-            const segRec = { type: seg.type, s0: this._genS, s1: this._genS + n * STEP, k: seg.k };
-            this.segments.push(segRec);
+            this.segments.push({ type: seg.type, s0: this._genS, s1: this._genS + n * STEP, k: seg.k });
+            const y0 = this._genY, dY = seg.dY || 0;
             for (let i = 0; i < n; i++) {
-                const f = i / n;
+                const f = i / n, f1 = (i + 1) / n;
                 let k = seg.k;
-                if (seg.ramp) { // clothoid náběh/výběh 20 %
+                if (seg.ramp) {
                     const e = 0.2;
                     if (f < e) k *= f / e;
                     else if (f > 1 - e) k *= (1 - f) / e;
@@ -114,7 +121,11 @@ export class Road {
                 this._genX += Math.sin(this._genA) * STEP;
                 this._genZ += Math.cos(this._genA) * STEP;
                 this._genS += STEP;
-                this._pushSample(k);
+                // kosinový výškový profil segmentu
+                const yNew = y0 + dY * (1 - Math.cos(Math.PI * f1)) / 2;
+                const slope = (yNew - this._genY) / STEP;
+                this._genY = yNew;
+                this._pushSample(k, slope);
             }
         }
     }
@@ -123,9 +134,7 @@ export class Road {
     ensure(vanS) {
         const needTo = vanS + RC.chunksAhead * RC.chunkSamples * STEP + 60;
         this._genUpTo(needTo + 40);
-        // stavět nové chunky vpředu
         while (this._builtS() < needTo) this._buildChunk();
-        // recyklovat vzadu
         const behind = RC.chunksBehind * RC.chunkSamples * STEP;
         while (this.chunks.length && this.chunks[0].s1 < vanS - behind) {
             const c = this.chunks.shift();
@@ -133,21 +142,23 @@ export class Road {
             if (this.hooks.onChunkRelease) this.hooks.onChunkRelease(c.id);
         }
         this._trimSamples(vanS - behind - 80);
-        this._trimZones(vanS - 120);
-        this._trimSegments(vanS - 200);
+        while (this.checkpoints.length && this.checkpoints[0].s < vanS - 120) this.checkpoints.shift();
+        while (this.segments.length > 1 && this.segments[0].s1 < vanS - 200) this.segments.shift();
     }
 
     _builtS() { return this.chunks.length ? this.chunks[this.chunks.length - 1].s1 : this.baseS; }
-
     _idxOfS(s) { return clamp(Math.round((s - this.baseS) / STEP), 0, this.samples.length - 1); }
 
     sampleAt(s) { return this.samples[this._idxOfS(s)]; }
     kappaAt(s) { const sm = this.sampleAt(s); return sm ? sm.k : 0; }
     headingAt(s) { const sm = this.sampleAt(s); return sm ? sm.a : 0; }
-    pointAt(s, lat = 0) {
+    yAt(s) { const sm = this.sampleAt(s); return sm ? sm.y : 10; }
+    slopeAt(s) { const sm = this.sampleAt(s); return sm ? sm.slope : 0; }
+    /** lat > 0 = vlevo (pevnina), lat < 0 = vpravo (moře) */
+    pointAt(s, lat = 0, yOff = 0) {
         const sm = this.sampleAt(s);
         if (!sm) return new THREE.Vector3();
-        return new THREE.Vector3(sm.x + Math.cos(sm.a) * lat, 0, sm.z - Math.sin(sm.a) * lat);
+        return new THREE.Vector3(sm.x + Math.cos(sm.a) * lat, sm.y + yOff, sm.z - Math.sin(sm.a) * lat);
     }
 
     _buildChunk() {
@@ -155,25 +166,39 @@ export class Road {
         const i0 = this._idxOfS(s0);
         const n = RC.chunkSamples;
         const i1 = Math.min(i0 + n, this.samples.length - 1);
-        const chunk = { id: this.chunkId++, s0, s1: this.samples[i1].s, meshes: [], i0S: s0 };
+        const chunk = { id: this.chunkId++, s0, s1: this.samples[i1].s, meshes: [] };
 
-        chunk.meshes.push(this._stripMesh(i0, i1, -HALF, HALF, this.asphalt, 0.02, true));
-        chunk.meshes.push(this._stripMesh(i0, i1, HALF - RC.edgeLine, HALF, this.lineMat, 0.035, false));
-        chunk.meshes.push(this._stripMesh(i0, i1, -HALF, -HALF + RC.edgeLine, this.lineMat, 0.035, false));
+        const road = (sm, lat, yo) => [sm.x + Math.cos(sm.a) * lat, sm.y + yo, sm.z - Math.sin(sm.a) * lat];
+        // asfalt + krajnice
+        chunk.meshes.push(this._strip(i0, i1, sm => road(sm, -HALF, 0.02), sm => road(sm, HALF, 0.02), this.asphalt, true));
+        chunk.meshes.push(this._strip(i0, i1, sm => road(sm, HALF - RC.edgeLine, 0.035), sm => road(sm, HALF, 0.035), this.lineMat));
+        chunk.meshes.push(this._strip(i0, i1, sm => road(sm, -HALF, 0.035), sm => road(sm, -HALF + RC.edgeLine, 0.035), this.lineMat));
+        // pevnina vlevo (mírně stoupá do vnitrozemí)
+        chunk.meshes.push(this._strip(i0, i1, sm => road(sm, HALF, -0.02), sm => [sm.x + Math.cos(sm.a) * 60, sm.y + 3.5, sm.z - Math.sin(sm.a) * 60], this.landMat));
+        // stěna útesu vpravo dolů k vodě (pořadí hran tak, aby normály mířily k moři)
+        chunk.meshes.push(this._strip(i0, i1,
+            sm => { const l = -(HALF + 3.5 + sm.y * 0.3); return [sm.x + Math.cos(sm.a) * l, 0.15, sm.z - Math.sin(sm.a) * l]; },
+            sm => road(sm, -HALF, -0.02),
+            this.cliffMat));
+        // pěna u paty útesu
+        chunk.meshes.push(this._strip(i0, i1,
+            sm => { const l = -(HALF + 5.8 + sm.y * 0.3); return [sm.x + Math.cos(sm.a) * l, 0.07, sm.z - Math.sin(sm.a) * l]; },
+            sm => { const l = -(HALF + 3.3 + sm.y * 0.3); return [sm.x + Math.cos(sm.a) * l, 0.09, sm.z - Math.sin(sm.a) * l]; },
+            this.foamMat));
         for (const m of chunk.meshes) this.scene.add(m);
 
-        // vizuál kemp zón ležících v tomto chunku
-        for (const z of this.campZones) {
-            if (z.meshes.length === 0 && z.s0 >= chunk.s0 && z.s0 < chunk.s1) {
-                this._buildZoneVisual(z);
-                if (this.hooks.onCampZone) this.hooks.onCampZone(z, chunk, this);
+        for (const cp of this.checkpoints) {
+            if (!cp.built && cp.s >= chunk.s0 && cp.s < chunk.s1) {
+                cp.built = true;
+                if (this.hooks.onCheckpoint) this.hooks.onCheckpoint(cp, chunk, this);
             }
         }
         this.chunks.push(chunk);
         if (this.hooks.onChunkProps) this.hooks.onChunkProps(chunk, this);
     }
 
-    _stripMesh(i0, i1, latA, latB, mat, y, vary) {
+    /** pás mezi dvěma hranami; fnA/fnB(sample) -> [x,y,z] */
+    _strip(i0, i1, fnA, fnB, mat, vary) {
         const count = i1 - i0 + 1;
         const pos = new Float32Array(count * 2 * 3);
         const col = vary ? new Float32Array(count * 2 * 3) : null;
@@ -181,10 +206,10 @@ export class Road {
         const cBase = new THREE.Color(0x4b4b54);
         for (let i = 0; i < count; i++) {
             const sm = this.samples[i0 + i];
-            const lx = Math.cos(sm.a), lz = -Math.sin(sm.a);
+            const A = fnA(sm), B = fnB(sm);
             const o = i * 6;
-            pos[o] = sm.x + lx * latA; pos[o + 1] = y; pos[o + 2] = sm.z + lz * latA;
-            pos[o + 3] = sm.x + lx * latB; pos[o + 4] = y; pos[o + 5] = sm.z + lz * latB;
+            pos[o] = A[0]; pos[o + 1] = A[1]; pos[o + 2] = A[2];
+            pos[o + 3] = B[0]; pos[o + 4] = B[1]; pos[o + 5] = B[2];
             if (col) {
                 const v = 0.92 + 0.16 * Math.sin(sm.s * 0.63 + Math.sin(sm.s * 0.171) * 2.0);
                 for (let j = 0; j < 2; j++) {
@@ -207,25 +232,6 @@ export class Road {
         return m;
     }
 
-    _buildZoneVisual(zone) {
-        // malovaný obdélník na silnici
-        const i0 = this._idxOfS(zone.s0), i1 = this._idxOfS(zone.s1);
-        const paint = this._stripMesh(i0, i1, -HALF + 0.5, HALF - 0.5, this.zoneMat, 0.045, false);
-        this.scene.add(paint);
-        zone.meshes.push(paint);
-        // středová čára zóny
-        const ic = this._idxOfS(zone.sc);
-        const mid = this._stripMesh(Math.max(i0, ic - 1), Math.min(i1, ic + 1), -HALF + 0.5, HALF - 0.5,
-            new THREE.MeshBasicMaterial({ color: 0xff5d3a }), 0.055, false);
-        this.scene.add(mid);
-        zone.meshes.push(mid);
-    }
-
-    disposeZoneVisual(zone) {
-        for (const m of zone.meshes) { this.scene.remove(m); m.geometry.dispose(); }
-        zone.meshes.length = 0;
-    }
-
     _disposeChunk(c) {
         for (const m of c.meshes) { this.scene.remove(m); m.geometry.dispose(); }
     }
@@ -239,18 +245,8 @@ export class Road {
             this._projIdx = Math.max(0, this._projIdx - cut);
         }
     }
-    _trimZones(sMin) {
-        while (this.campZones.length && this.campZones[0].s1 < sMin) {
-            this.disposeZoneVisual(this.campZones[0]);
-            this.campZones.shift();
-        }
-    }
-    _trimSegments(sMin) {
-        while (this.segments.length > 1 && this.segments[0].s1 < sMin) this.segments.shift();
-    }
 
     // ---------- dotazy ----------
-    /** promítne světovou pozici na silnici -> {s, lat, heading, kappa} */
     project(px, pz) {
         let best = Infinity, bi = this._projIdx;
         const from = Math.max(0, this._projIdx - 6);
@@ -266,7 +262,7 @@ export class Road {
         const dx = px - sm.x, dz = pz - sm.z;
         const lat = dx * Math.cos(sm.a) - dz * Math.sin(sm.a);
         const along = dx * Math.sin(sm.a) + dz * Math.cos(sm.a);
-        return { s: sm.s + along, lat, heading: sm.a, kappa: sm.k };
+        return { s: sm.s + along, lat, heading: sm.a, kappa: sm.k, y: sm.y, slope: sm.slope };
     }
 
     segmentAt(s) {
@@ -276,8 +272,18 @@ export class Road {
         return null;
     }
 
-    nextZone(s) {
-        for (const z of this.campZones) if (z.state === 'pending' && z.s1 + 15 > s) return z;
+    /** tunelové úseky protínající rozsah [a,b] */
+    tunnelsIn(a, b) {
+        return this.segments.filter(sg => sg.type === 'TUNNEL' && sg.s1 > a && sg.s0 < b);
+    }
+
+    inTunnel(s) {
+        const sg = this.segmentAt(s);
+        return sg && sg.type === 'TUNNEL';
+    }
+
+    nextCheckpoint(s) {
+        for (const cp of this.checkpoints) if (cp.state === 'pending' && cp.s + 15 > s) return cp;
         return null;
     }
 }

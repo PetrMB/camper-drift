@@ -141,10 +141,11 @@ export class CameraRig {
     }
     snapTo(van) {
         const yaw = van.yaw, p = van.pos;
-        this.pos.set(p.x - Math.sin(yaw) * CC.dist, CC.height, p.z - Math.cos(yaw) * CC.dist);
+        this.pos.set(p.x - Math.sin(yaw) * CC.dist, (van.visY || 0) + CC.height, p.z - Math.cos(yaw) * CC.dist);
     }
     update(dt, van, timeScale) {
         const yaw = van.yaw, p = van.pos;
+        const roadY = van.visY || 0;
         const sinY = Math.sin(yaw), cosY = Math.cos(yaw);
         const slip = van.slipDeg / 180 * Math.PI;
         // cíl: za vozem + boční offset proti smyku (drift čitelný z boku)
@@ -154,7 +155,8 @@ export class CameraRig {
         const k = Math.min(1, CC.spring * dt);
         this.pos.x += (tx - this.pos.x) * k;
         this.pos.z += (tz - this.pos.z) * k;
-        this.pos.y += (CC.height - this.pos.y) * k;
+        // výška sleduje silnici měkčí pružinou -> na hřebenech kamera "plave"
+        this.pos.y += (roadY + CC.height - this.pos.y) * Math.min(1, CC.ySpring * dt);
 
         this.shakeT += dt * 30;
         const sh = CC.shake * clamp(Math.abs(van.slipDeg) / 30, 0, 1) * clamp(van.speed / 20, 0, 1);
@@ -162,7 +164,7 @@ export class CameraRig {
         const shy = (Math.sin(this.shakeT * 1.7) + Math.sin(this.shakeT * 3.1)) * 0.5 * sh;
 
         this.cam.position.set(this.pos.x + shx, this.pos.y + shy, this.pos.z);
-        this.look.set(p.x + sinY * CC.lookAhead, CC.lookUp, p.z + cosY * CC.lookAhead);
+        this.look.set(p.x + sinY * CC.lookAhead, roadY + CC.lookUp, p.z + cosY * CC.lookAhead);
         this.cam.lookAt(this.look);
 
         const speedNorm = clamp(van.speed / 28, 0, 1);
@@ -175,6 +177,22 @@ export class CameraRig {
 }
 
 // ---------- částice (kouř / prach / konfety) ----------
+let _dotTex = null;
+function dotTexture() {
+    if (_dotTex) return _dotTex;
+    const c = document.createElement('canvas');
+    c.width = c.height = 32;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(16, 16, 2, 16, 16, 15);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.7, 'rgba(255,255,255,0.55)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 32, 32);
+    _dotTex = new THREE.CanvasTexture(c);
+    return _dotTex;
+}
+
 export class Particles {
     constructor(scene, count, size, opts = {}) {
         this.count = count;
@@ -191,7 +209,7 @@ export class Particles {
         geo.setAttribute('color', new THREE.BufferAttribute(this.col, 3));
         this.points = new THREE.Points(geo, new THREE.PointsMaterial({
             size, vertexColors: true, transparent: true, opacity: opts.opacity ?? 0.55,
-            depthWrite: false, sizeAttenuation: true,
+            depthWrite: false, sizeAttenuation: true, map: dotTexture(),
         }));
         this.points.frustumCulled = false;
         this.gravity = opts.gravity ?? 0;
@@ -243,8 +261,7 @@ export class TireMarks {
         if (!this._has) { this._lastL.copy(l); this._lastR.copy(r); this._has = true; return; }
         if (this._lastL.distanceToSquared(l) < 0.09) return;
         const o = this.head * 18; this.head = (this.head + 1) % this.n;
-        const y = 0.045;
-        const set = (k, v) => { this.pos[o + k] = v.x; this.pos[o + k + 1] = y; this.pos[o + k + 2] = v.z; };
+        const set = (k, v) => { this.pos[o + k] = v.x; this.pos[o + k + 1] = v.y; this.pos[o + k + 2] = v.z; };
         // quad: lastL, lastR, L / lastR, R, L
         set(0, this._lastL); set(3, this._lastR); set(6, l);
         set(9, this._lastR); set(12, r); set(15, l);

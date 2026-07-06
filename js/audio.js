@@ -15,8 +15,12 @@ export class GameAudio {
         const c = this.ctx;
         this.master = c.createGain();
         this.master.gain.value = this.muted ? 0 : 0.5;
+        // tunelový filtr mezi masterem a výstupem (echo/tlumení v tunelu)
+        this.tunnelLP = c.createBiquadFilter();
+        this.tunnelLP.type = 'lowpass';
+        this.tunnelLP.frequency.value = 20000;
         const comp = c.createDynamicsCompressor();
-        this.master.connect(comp); comp.connect(c.destination);
+        this.master.connect(this.tunnelLP); this.tunnelLP.connect(comp); comp.connect(c.destination);
 
         // — motor: 2 rozladěné saw + sub sinus -> lowpass
         this.engGain = c.createGain(); this.engGain.gain.value = 0;
@@ -45,8 +49,77 @@ export class GameAudio {
         this.wobG = c.createGain(); this.wobG.gain.value = 180;
         this.wob.connect(this.wobG); this.wobG.connect(this.bp.frequency); this.wob.start();
 
+        // — moře: hluboce filtrovaný šum s pomalým dechem vln
+        this.waveSrc = c.createBufferSource(); this.waveSrc.buffer = buf; this.waveSrc.loop = true;
+        const waveLP = c.createBiquadFilter(); waveLP.type = 'lowpass'; waveLP.frequency.value = 320; waveLP.Q.value = 0.4;
+        this.waveGain = c.createGain(); this.waveGain.gain.value = 0.05;
+        this.waveSrc.connect(waveLP); waveLP.connect(this.waveGain); this.waveGain.connect(this.master);
+        this.waveSrc.start();
+        this.waveLFO = c.createOscillator(); this.waveLFO.frequency.value = 0.11;
+        this.waveLFOG = c.createGain(); this.waveLFOG.gain.value = 0.028;
+        this.waveLFO.connect(this.waveLFOG); this.waveLFOG.connect(this.waveGain.gain); this.waveLFO.start();
+
         this.ready = true;
         c.resume();
+    }
+
+    /** tlumení v tunelu (t = true uvnitř) */
+    tunnel(inside) {
+        if (!this.ready) return;
+        const t = this.ctx.currentTime;
+        this.tunnelLP.frequency.linearRampToValueAtTime(inside ? 1100 : 20000, t + 0.25);
+        this.waveGain.gain.linearRampToValueAtTime(inside ? 0.005 : 0.05, t + 0.25);
+    }
+
+    /** racek — klouzavé dvojité zakřičení, neagresivní */
+    gull() {
+        if (!this.ready || this.muted) return;
+        const c = this.ctx, t0 = c.currentTime;
+        for (let i = 0; i < 2; i++) {
+            const o = c.createOscillator(); o.type = 'triangle';
+            const st = t0 + i * 0.28;
+            o.frequency.setValueAtTime(1750 + Math.random() * 250, st);
+            o.frequency.exponentialRampToValueAtTime(950, st + 0.22);
+            const g = c.createGain();
+            g.gain.setValueAtTime(0.0001, st);
+            g.gain.exponentialRampToValueAtTime(0.07, st + 0.04);
+            g.gain.exponentialRampToValueAtTime(0.0001, st + 0.26);
+            o.connect(g); g.connect(this.master);
+            o.start(st); o.stop(st + 0.3);
+        }
+    }
+
+    /** houkání zaoceánského parníku — hluboký dvojtón v dálce */
+    shipHorn() {
+        if (!this.ready || this.muted) return;
+        const c = this.ctx, t0 = c.currentTime;
+        [0, 1.1].forEach(off => {
+            [82, 110].forEach(f => {
+                const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+                const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 380;
+                const g = c.createGain();
+                g.gain.setValueAtTime(0.0001, t0 + off);
+                g.gain.linearRampToValueAtTime(0.09, t0 + off + 0.15);
+                g.gain.setValueAtTime(0.09, t0 + off + 0.7);
+                g.gain.exponentialRampToValueAtTime(0.0001, t0 + off + 1.0);
+                o.connect(lp); lp.connect(g); g.connect(this.master);
+                o.start(t0 + off); o.stop(t0 + off + 1.1);
+            });
+        });
+    }
+
+    /** krátké přátelské police "whoop" při čistém průjezdu */
+    whoop() {
+        if (!this.ready || this.muted) return;
+        const c = this.ctx, t0 = c.currentTime;
+        const o = c.createOscillator(); o.type = 'sine';
+        o.frequency.setValueAtTime(600, t0);
+        o.frequency.exponentialRampToValueAtTime(1350, t0 + 0.28);
+        const g = c.createGain();
+        g.gain.setValueAtTime(0.12, t0);
+        g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.32);
+        o.connect(g); g.connect(this.master);
+        o.start(t0); o.stop(t0 + 0.35);
     }
 
     setMuted(m) {
