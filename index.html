@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <title>Camper Drift: Euro Trip 🚐</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚐</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- knihovny jsou vendorované lokálně (three 0.170.0, rapier3d-compat 0.14.0) — žádná závislost na CDN -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "./vendor/three.module.js",
+            "three/addons/": "./vendor/jsm/",
+            "@dimforge/rapier3d-compat": "./vendor/rapier3d-compat.js"
+        }
+    }
+    </script>
+</head>
+<body>
+    <canvas id="game"></canvas>
+
+    <!-- vignette pro near-miss puls -->
+    <div id="vignette"></div>
+
+    <!-- horní HUD -->
+    <div id="hud-top" class="hidden">
+        <div class="hud-left">
+            <div id="hud-biome">🌷 HOLANDSKO</div>
+            <div id="hud-best"></div>
+        </div>
+        <div class="hud-center">
+            <div id="hud-score">0</div>
+            <div id="hud-combo" class="combo">×1</div>
+        </div>
+        <div class="hud-right">
+            <div id="hud-speed">0 km/h</div>
+            <button id="btn-mute" class="no-drive">🔊</button>
+        </div>
+    </div>
+
+    <!-- banner kempu -->
+    <div id="camp-banner" class="hidden">
+        <span>⛺ KEMP za <b id="camp-dist">300 m</b> — DRŽ pro smyk a zastav v zóně!</span>
+        <div class="camp-bar"><div id="camp-bar-fill"></div></div>
+    </div>
+
+    <!-- výsledek kempu -->
+    <div id="camp-result" class="camp-result hidden"></div>
+
+    <!-- plovoucí popupy -->
+    <div id="popups"></div>
+
+    <!-- start -->
+    <section id="screen-start" class="screen">
+        <div class="panel">
+            <div class="van-emoji">🚐</div>
+            <h1>CAMPER DRIFT</h1>
+            <h2>EURO TRIP</h2>
+            <p class="tagline">Hymercar '87 · serpentiny · čtyři země Evropy</p>
+            <p id="start-best" class="best"></p>
+            <div class="hold-hint">DRŽ <span class="key">MEZERNÍK</span> / <span class="key">DOTYK</span> = DRIFT</div>
+            <p class="sub">Pusť = narovnat · Drž na rovince = brzdný smyk<br>Zastav smykem v kempu ⛺ a zvyš si kombo!</p>
+            <div class="start-cta">▶ KLEPNI A JEĎ</div>
+        </div>
+    </section>
+
+    <!-- game over -->
+    <section id="screen-over" class="screen hidden">
+        <div class="panel">
+            <h2>KONEC JÍZDY</h2>
+            <div id="over-record" class="record hidden">🏆 NOVÝ REKORD!</div>
+            <div id="over-score" class="final-score">0</div>
+            <table id="over-stats" class="stats"></table>
+            <div class="start-cta">▶ KLEPNI PRO NOVOU JÍZDU</div>
+        </div>
+    </section>
+
+    <div id="boot-error" class="hidden"></div>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
