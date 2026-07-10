@@ -1,0 +1,18 @@
+{
+  "name": "Slapy Navigátor",
+  "short_name": "Slapy",
+  "description": "Lodní navigace a přehled pro plavební oblast Slapy — mapa, GPS, přístaviště, pravidla plavby.",
+  "lang": "cs",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1d2a",
+  "theme_color": "#0b1d2a",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

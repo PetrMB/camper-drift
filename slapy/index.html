@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0b1d2a">
+<meta name="description" content="Lodní navigace a přehled pro plavební oblast Slapy — mapa, GPS, říční kilometráž, přístaviště, pravidla plavby, počasí.">
+<title>Slapy Navigátor — lodní mapa a navigace</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- ===================== STAVOVÝ PRUH (GPS) ===================== -->
+<header id="statusbar" aria-label="Stav plavby">
+  <div class="stat" id="stat-speed" title="Rychlost">
+    <span class="stat-value" id="speed-val">—</span>
+    <span class="stat-unit" id="speed-unit">km/h</span>
+  </div>
+  <div class="stat" id="stat-course" title="Kurz">
+    <span class="stat-value" id="course-val">—</span>
+    <span class="stat-unit">kurz</span>
+  </div>
+  <div class="stat" id="stat-km" title="Říční kilometr">
+    <span class="stat-value" id="km-val">—</span>
+    <span class="stat-unit">ř. km</span>
+  </div>
+  <div class="stat" id="stat-depth" title="Hladina">
+    <span class="stat-value" id="level-val">—</span>
+    <span class="stat-unit">hladina</span>
+  </div>
+  <button id="gps-btn" class="gps-off" aria-label="Zapnout GPS">GPS</button>
+</header>
+
+<!-- ===================== VAROVÁNÍ ===================== -->
+<div id="alertbar" hidden></div>
+
+<!-- ===================== MAPA ===================== -->
+<main id="map" role="application" aria-label="Plavební mapa Slapy"></main>
+
+<!-- plovoucí tlačítka na mapě -->
+<div id="map-fabs">
+  <button id="fab-locate" title="Moje poloha" aria-label="Vycentrovat na moji polohu">◎</button>
+  <button id="fab-layers" title="Mapové podklady" aria-label="Přepnout mapový podklad">🗺</button>
+  <button id="fab-north" title="Sever nahoře / po kurzu" aria-label="Orientace mapy">N↑</button>
+  <button id="fab-mob" title="Muž přes palubu" aria-label="Muž přes palubu — označit polohu">MOB</button>
+</div>
+
+<!-- měření vzdálenosti / cíl -->
+<div id="target-info" hidden>
+  <div id="target-text"></div>
+  <button id="target-clear" aria-label="Zrušit cíl">✕</button>
+</div>
+
+<!-- ===================== PANELY ===================== -->
+<section id="panel" hidden>
+  <div id="panel-handle"><span></span></div>
+  <div id="panel-content"></div>
+</section>
+
+<!-- ===================== SPODNÍ NAVIGACE ===================== -->
+<nav id="tabbar" aria-label="Hlavní navigace">
+  <button data-tab="map" class="active" aria-label="Mapa"><span class="ico">🧭</span>Mapa</button>
+  <button data-tab="places" aria-label="Místa"><span class="ico">⚓</span>Místa</button>
+  <button data-tab="trip" aria-label="Plavba"><span class="ico">📍</span>Plavba</button>
+  <button data-tab="rules" aria-label="Pravidla"><span class="ico">⚖️</span>Pravidla</button>
+  <button data-tab="info" aria-label="Informace"><span class="ico">ℹ️</span>Info</button>
+</nav>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="js/data/river.js"></script>
+<script src="js/data/zones.js"></script>
+<script src="js/data/pois.js"></script>
+<script src="js/data/rules.js"></script>
+<script src="js/riverkm.js"></script>
+<script src="js/gps.js"></script>
+<script src="js/weather.js"></script>
+<script src="js/panels.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
