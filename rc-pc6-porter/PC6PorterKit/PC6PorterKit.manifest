@@ -1,0 +1,10 @@
+{
+    "autodeskProduct": "Fusion360",
+    "type": "script",
+    "author": "Claude",
+    "description": {
+        "": "Generuje RC model Pilatus PC-6 Porter (1:8) v dilech - zebra, nosniky, prepazky, podelniky, ocasni plochy, podvozek."
+    },
+    "supportedOS": "windows|mac",
+    "editEnabled": true
+}
