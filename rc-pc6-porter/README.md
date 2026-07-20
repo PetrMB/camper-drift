@@ -89,6 +89,26 @@ Pozn.: skript byl napsán proti dokumentaci Fusion 360 API, ale v tomto
 prostředí není Fusion k dispozici, takže neprošel spuštěním — případnou
 chybu skript vypíše v dialogu i s řádkem.
 
+## Mesh exporty (import bez Fusion API)
+
+Protože Fusion MCP konektor není v cloudové session dostupný, je tu i
+`export_mesh.py` — postaví stejnou geometrii přes `trimesh` a vyexportuje ji
+do `exports/`:
+
+- `pc6_porter_kit.glb` — celý model, pojmenované a obarvené díly (náhled),
+- `pc6_wing_R/L.stl`, `pc6_fuselage.stl`, `pc6_tail.stl`,
+  `pc6_landing_gear.stl`, `pc6_struts.stl`, `pc6_cowl.stl` — po komponentách,
+- `pc6_porter_combined.stl` — vše v jednom,
+- `pc6_preview.png` — render (generuje `render_preview.py`).
+
+Import do Fusionu: *Insert → Insert Mesh* a vybrat STL (jednotky mm).
+Meshe jsou vizuální/referenční; plně parametrický model s vyříznutými
+drážkami vytvoří skript `PC6PorterKit` (mesh export drážky neřeže, díly se
+v místech spojů překrývají).
+
+Spuštění exportu: `pip install trimesh shapely numpy scipy mapbox-earcut`
+a `python3 export_mesh.py`.
+
 ## Možná další vylepšení
 
 - klapky a křidélka jako samostatné díly (PC-6 má výrazné vztlakové klapky),
