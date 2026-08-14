@@ -19,6 +19,8 @@ export class Road {
         this.hooks = hooks || {};
         this.asphalt = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
         this.lineMat = new THREE.MeshBasicMaterial({ color: 0xf5f2e8 });
+        this.centerMat = new THREE.MeshBasicMaterial({ color: 0xf2d98a }); // přerušovaná žlutobílá středová čára
+        this.wheelMat = new THREE.MeshBasicMaterial({ color: 0x15151a, transparent: true, opacity: 0.3, depthWrite: false }); // vyjeté pruhy kol
         this.landMat = new THREE.MeshStandardMaterial({ color: 0x9dbb6a, roughness: 1 });
         this.cliffMat = new THREE.MeshStandardMaterial({ color: 0xb09a80, roughness: 1, flatShading: true });
         this.foamMat = new THREE.MeshBasicMaterial({ color: 0xf0f8f5, transparent: true, opacity: 0.85 });
@@ -185,6 +187,17 @@ export class Road {
         chunk.meshes.push(this._strip(i0, i1, sm => road(sm, -HALF, 0.02), sm => road(sm, HALF, 0.02), this.asphalt, true));
         chunk.meshes.push(this._strip(i0, i1, sm => road(sm, HALF - RC.edgeLine, 0.035), sm => road(sm, HALF, 0.035), this.lineMat));
         chunk.meshes.push(this._strip(i0, i1, sm => road(sm, -HALF, 0.035), sm => road(sm, -HALF + RC.edgeLine, 0.035), this.lineMat));
+        // vyjeté pruhy kol — jemné tmavší pásy v dráze pneumatik, mírně nad asfaltem
+        const wOff = RC.wheelTrackOffset, wHalf = RC.wheelTrackWidth / 2;
+        chunk.meshes.push(this._strip(i0, i1, sm => road(sm, -wOff - wHalf, 0.028), sm => road(sm, -wOff + wHalf, 0.028), this.wheelMat));
+        chunk.meshes.push(this._strip(i0, i1, sm => road(sm, wOff - wHalf, 0.028), sm => road(sm, wOff + wHalf, 0.028), this.wheelMat));
+        // přerušovaná středová čára — v mezerách kolabuje na nulovou šířku (levné, jeden strip)
+        const cycle = RC.centerDash + RC.centerGap, cHalf = RC.centerWidth / 2;
+        const dashOn = sm => ((sm.s % cycle) + cycle) % cycle < RC.centerDash;
+        chunk.meshes.push(this._strip(i0, i1,
+            sm => dashOn(sm) ? road(sm, -cHalf, 0.034) : road(sm, 0, 0.034),
+            sm => dashOn(sm) ? road(sm, cHalf, 0.034) : road(sm, 0, 0.034),
+            this.centerMat));
         // pevnina vlevo (mírně stoupá do vnitrozemí)
         chunk.meshes.push(this._strip(i0, i1, sm => road(sm, HALF, -0.02), sm => [sm.x + Math.cos(sm.a) * 60, sm.y + 3.5, sm.z - Math.sin(sm.a) * 60], this.landMat));
         // stěna útesu vpravo dolů k vodě (pořadí hran tak, aby normály mířily k moři)
@@ -215,7 +228,7 @@ export class Road {
         const pos = new Float32Array(count * 2 * 3);
         const col = vary ? new Float32Array(count * 2 * 3) : null;
         const idx = [];
-        const cBase = new THREE.Color(0x4b4b54);
+        const cBase = new THREE.Color(0x424149); // o něco tmavší/chladnější asfalt — víc kontrastu vůči bílé/žluté krajnici a čáře
         for (let i = 0; i < count; i++) {
             const sm = this.samples[i0 + i];
             const A = fnA(sm), B = fnB(sm);
@@ -223,7 +236,7 @@ export class Road {
             pos[o] = A[0]; pos[o + 1] = A[1]; pos[o + 2] = A[2];
             pos[o + 3] = B[0]; pos[o + 4] = B[1]; pos[o + 5] = B[2];
             if (col) {
-                const v = 0.92 + 0.16 * Math.sin(sm.s * 0.63 + Math.sin(sm.s * 0.171) * 2.0);
+                const v = 0.82 + 0.15 * Math.sin(sm.s * 0.63 + Math.sin(sm.s * 0.171) * 2.0);
                 for (let j = 0; j < 2; j++) {
                     col[o + j * 3] = cBase.r * v; col[o + j * 3 + 1] = cBase.g * v; col[o + j * 3 + 2] = cBase.b * v;
                 }

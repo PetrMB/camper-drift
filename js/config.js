@@ -8,6 +8,11 @@ export const CONFIG = {
         chunksBehind: 2,
         width: 9,             // šířka silnice
         edgeLine: 0.28,       // šířka krajnice
+        centerDash: 3,        // m délka segmentu středové čáry
+        centerGap: 6,         // m mezera mezi segmenty
+        centerWidth: 0.15,    // m šířka středové čáry
+        wheelTrackOffset: 1.7,  // m od osy — pozice vyjetých pruhů kol
+        wheelTrackWidth: 0.9,   // m šířka vyjetého pruhu
     },
 
     elevation: {
@@ -111,6 +116,14 @@ export const CONFIG = {
         lampStep: 10,
     },
 
+    props: {
+        reflectorSpacing: 12,  // m — odrazky na zídce u moře
+        bollardSpacing: 18,    // m — patníky na pevninské straně
+        bushSpacingMin: 7,     // m — keříky (levandule/oliva)
+        bushSpacingMax: 16,
+        boulderChance: 0.35,   // šance balvanu u krajnice na chunk
+    },
+
     boats: {
         sailboats: 3,
         fishing: 2,
@@ -195,8 +208,14 @@ export const IS_MOBILE =
     (navigator.maxTouchPoints > 1 || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent));
 
 export const QUALITY = IS_MOBILE
-    ? { pixelRatio: 1.5, shadow: 1024, bloomScale: 0.5, antialias: false, smoke: 128, seaSegs: 40, stars: 380 }
-    : { pixelRatio: Math.min(window.devicePixelRatio || 1, 2), shadow: 2048, bloomScale: 1, antialias: true, smoke: 224, seaSegs: 72, stars: 750 };
+    ? {
+        pixelRatio: 1.5, shadow: 1024, bloomScale: 0.5, antialias: false, smoke: 128, seaSegs: 40, stars: 380,
+        reflACount: 55, reflBCount: 20, bollardCount: 35, bushCount: 80, boulderCount: 10,
+    }
+    : {
+        pixelRatio: Math.min(window.devicePixelRatio || 1, 2), shadow: 2048, bloomScale: 1, antialias: true, smoke: 224, seaSegs: 72, stars: 750,
+        reflACount: 100, reflBCount: 40, bollardCount: 70, bushCount: 160, boulderCount: 20,
+    };
 
 export function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 export function lerp(a, b, t) { return a + (b - a) * t; }

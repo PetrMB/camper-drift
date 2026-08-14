@@ -1,7 +1,7 @@
 // Pobřežní prostředí: denní doby, moře s vlnami, lodě, útes, tunely,
 // policejní kontroly a instancované propy
 import * as THREE from 'three';
-import { CONFIG, clamp, lerp, makeRng } from './config.js';
+import { CONFIG, QUALITY, clamp, lerp, makeRng } from './config.js';
 import { createProp, createRock, createPolice, removeBody, parkProp, placeProp } from './physics.js';
 
 // ---------- denní doby (nahrazují biomy; pole kompatibilní s effects.js) ----------
@@ -320,6 +320,22 @@ function stripeTexture() {
     return t;
 }
 
+// dvoubarevná geometrie patníku (bílé tělo + tmavý pruh u vrcholu) — vertex colors, jeden draw call na pool
+function bollardGeometry() {
+    const h = 0.85, bandFrac = 0.24;
+    const geo = new THREE.CylinderGeometry(0.07, 0.09, h, 7);
+    const pos = geo.attributes.position;
+    const col = new Float32Array(pos.count * 3);
+    const white = new THREE.Color(0xf0ede2), dark = new THREE.Color(0x1c1c20);
+    for (let i = 0; i < pos.count; i++) {
+        const topFrac = pos.getY(i) / h + 0.5;
+        const c = topFrac > 1 - bandFrac ? dark : white;
+        col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    return geo;
+}
+
 // ---------- policejní auto (pool malých Group) ----------
 function buildPoliceCar(strobeR, strobeB) {
     const g = new THREE.Group();
@@ -475,9 +491,21 @@ export class Props {
             wall: new InstPool(instanced(new THREE.BoxGeometry(3.2, 0.55, 0.35), std({ color: 0xd8cfc0, roughness: 0.95 }), 220), 220),
             rock: new InstPool(instanced(new THREE.IcosahedronGeometry(1, 0), std({ color: 0x8a8078, roughness: 1, flatShading: true }), 40), 40),
             lamp: new InstPool(instanced(new THREE.BoxGeometry(0.5, 0.12, 0.9), std({ color: 0xfff0c0, emissive: 0xffe9a0, emissiveIntensity: 1.6 }), 60), 60),
+            // odrazky na svodidle u moře — emisivní, v noci je zvýrazní bloom
+            reflA: new InstPool(instanced(new THREE.BoxGeometry(0.14, 0.15, 0.05), std({ color: 0xffa726, emissive: 0xff8c10, emissiveIntensity: 2.0, roughness: 0.4 }), QUALITY.reflACount), QUALITY.reflACount),
+            reflB: new InstPool(instanced(new THREE.BoxGeometry(0.14, 0.15, 0.05), std({ color: 0xe8341f, emissive: 0xe22010, emissiveIntensity: 2.0, roughness: 0.4 }), QUALITY.reflBCount), QUALITY.reflBCount),
+            // patníky na pevninské straně
+            bollard: new InstPool(instanced(bollardGeometry(), std({ vertexColors: true, roughness: 0.65 }), QUALITY.bollardCount), QUALITY.bollardCount),
+            // levandulové (fialové) a olivové (zelenošedé) keříky
+            bushA: new InstPool(instanced(new THREE.IcosahedronGeometry(0.55, 0), std({ color: 0x8a7ab8, roughness: 1, flatShading: true }), Math.round(QUALITY.bushCount / 2)), Math.round(QUALITY.bushCount / 2)),
+            bushB: new InstPool(instanced(new THREE.IcosahedronGeometry(0.5, 0), std({ color: 0x707a3c, roughness: 1, flatShading: true }), Math.round(QUALITY.bushCount / 2)), Math.round(QUALITY.bushCount / 2)),
+            // balvany u krajnice — čistě dekorativní, bez fyziky
+            boulder: new InstPool(instanced(new THREE.IcosahedronGeometry(1.3, 0), std({ color: 0x8f8478, roughness: 1, flatShading: true }), QUALITY.boulderCount), QUALITY.boulderCount),
         };
         for (const k in this.pools) this.pools[k].mesh.receiveShadow = false;
         for (const k in this.pools) scene.add(this.pools[k].mesh);
+        this.pools.reflA.mesh.castShadow = false; // drobné odrazky — stín by nic nepřidal
+        this.pools.reflB.mesh.castShadow = false;
 
         // barikády (dynamická tělesa, pruhované)
         const stripeMat = std({ map: stripeTexture(), roughness: 0.7 });
@@ -554,6 +582,55 @@ export class Props {
             const wi = this.pools.wall.take();
             this.pools.wall.set(wi, p.x, p.y + 0.22, p.z, road.headingAt(s) - Math.PI / 2, 1);
             this._own(chunk.id, { pool: this.pools.wall, idx: wi });
+        }
+
+        // odrazky na zídce — po ~12 m, drobná menšina červená (nebezpečné úseky)
+        const PR = CONFIG.props;
+        for (let s = chunk.s0 + 3; s < chunk.s1 - 2; s += PR.reflectorSpacing) {
+            if (inTunnel(s)) continue;
+            const p = road.pointAt(s, -(CONFIG.road.width / 2 + 0.28));
+            const pool = (Math.round(s / PR.reflectorSpacing) % 5 === 0) ? this.pools.reflB : this.pools.reflA;
+            const ri = pool.take();
+            pool.set(ri, p.x, p.y + 0.5, p.z, road.headingAt(s), 1);
+            this._own(chunk.id, { pool, idx: ri });
+        }
+
+        // patníky na pevninské straně — po ~18 m
+        for (let s = chunk.s0 + 6; s < chunk.s1 - 4; s += PR.bollardSpacing + rng() * 5) {
+            if (inTunnel(s)) continue;
+            const lat = CONFIG.road.width / 2 + 1.0;
+            const p = road.pointAt(s, lat);
+            const y = p.y + lat * 0.055;
+            const bi = this.pools.bollard.take();
+            this.pools.bollard.set(bi, p.x, y + 0.42, p.z, rng() * 6.283, 1);
+            this._own(chunk.id, { pool: this.pools.bollard, idx: bi });
+        }
+
+        // levandulové/olivové keříky roztroušené po pevnině
+        for (let s = chunk.s0 + 4; s < chunk.s1 - 3; s += PR.bushSpacingMin + rng() * (PR.bushSpacingMax - PR.bushSpacingMin)) {
+            if (inTunnel(s)) continue;
+            const lat = 3.6 + rng() * 26;
+            const p = road.pointAt(s, lat);
+            const y = p.y + lat * 0.055;
+            const sc = 0.55 + rng() * 0.5;
+            const pool = rng() > 0.5 ? this.pools.bushA : this.pools.bushB;
+            const bi = pool.take();
+            pool.set(bi, p.x, y + sc * 0.42, p.z, rng() * 6.283, sc);
+            this._own(chunk.id, { pool, idx: bi });
+        }
+
+        // občasný balvan u krajnice (dekorace, bez fyziky)
+        if (rng() < PR.boulderChance) {
+            const s = chunk.s0 + 8 + rng() * Math.max(1, chunk.s1 - chunk.s0 - 16);
+            if (!inTunnel(s)) {
+                const lat = 5.2 + rng() * 4.5;
+                const p = road.pointAt(s, lat);
+                const y = p.y + lat * 0.055;
+                const r = 0.9 + rng() * 0.9;
+                const oi = this.pools.boulder.take();
+                this.pools.boulder.set(oi, p.x, y + r * 0.4, p.z, rng() * 6.283, r);
+                this._own(chunk.id, { pool: this.pools.boulder, idx: oi });
+            }
         }
 
         // tunelové tubusy
