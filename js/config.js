@@ -145,6 +145,26 @@ export const CONFIG = {
 
     dayLength: 2000,          // m na denní dobu
     dayBlend: 260,            // m přechodové pásmo
+
+    sky: {
+        sunSizeLow: 30,        // poloměr slunečního kotouče nízko nad obzorem (m)
+        sunSizeHigh: 12,       // poloměr vysoko na obloze (v poledne)
+        sunGlowLow: 100,       // poloměr měkkého glow sprite (nízko)
+        sunGlowHigh: 40,       // poloměr glow sprite (vysoko)
+        sunCoreBoostLow: 1.1,  // multiplikátor jasu jádra nízko nad obzorem (drží sytě oranžovou, nevybledá do bíla)
+        sunCoreBoostHigh: 1.6, // multiplikátor jasu jádra vysoko na obloze (menší bílé slunce může být jasnější)
+        sunHeightMin: 0.22,    // rozsah normalizované výšky slunce (sunDir.y) pro škálování
+        sunHeightMax: 0.58,
+        moonSize: 13,
+        moonGlowSize: 46,
+        starRadius: 430,       // poloměr kopule s hvězdami
+        flareOffsets: [0.3, 0.56, 0.86],   // pozice na ose slunce->střed obrazu (0=u slunce, 1=u středu)
+        flareSizes: [11, 20, 8],
+        flareOpac: [0.6, 0.45, 0.3],       // výrazně čitelnější na teplé obloze (studenější barva, viz Sky)
+        flareColor: 0xdcecff,   // studený kontrastní tón (odlišný od teplé oblohy)
+        streakSize: [130, 3.2], // [délka, výška] horizontálního "anamorfního" streak prvku (m)
+        streakOpac: 0.4,
+    },
 };
 
 export const IS_MOBILE =
@@ -152,8 +172,8 @@ export const IS_MOBILE =
     (navigator.maxTouchPoints > 1 || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent));
 
 export const QUALITY = IS_MOBILE
-    ? { pixelRatio: 1.5, shadow: 1024, bloomScale: 0.5, antialias: false, smoke: 128, seaSegs: 40 }
-    : { pixelRatio: Math.min(window.devicePixelRatio || 1, 2), shadow: 2048, bloomScale: 1, antialias: true, smoke: 224, seaSegs: 72 };
+    ? { pixelRatio: 1.5, shadow: 1024, bloomScale: 0.5, antialias: false, smoke: 128, seaSegs: 40, stars: 380 }
+    : { pixelRatio: Math.min(window.devicePixelRatio || 1, 2), shadow: 2048, bloomScale: 1, antialias: true, smoke: 224, seaSegs: 72, stars: 750 };
 
 export function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 export function lerp(a, b, t) { return a + (b - a) * t; }
