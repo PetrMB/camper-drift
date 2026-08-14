@@ -1,12 +1,12 @@
 // Riviera Run — vstupní bod: bootstrap, herní smyčka, stavový automat
 import * as THREE from 'three';
-import { CONFIG, QUALITY, IS_MOBILE, clamp } from './config.js';
+import { CONFIG, QUALITY, IS_MOBILE, clamp, lerp } from './config.js';
 import { initPhysics, stepPhysics } from './physics.js';
 import { Road } from './road.js';
 import { Van, VanState } from './van.js';
 import { WorldEnv, Props, Sea, Fleet, biomeMix } from './biomes.js';
 import { Traffic } from './traffic.js';
-import { setupRenderer, setupComposer, Sky, Ridges, CameraRig, Particles, TireMarks } from './effects.js';
+import { setupRenderer, setupComposer, Sky, Ridges, CameraRig, Particles, TireMarks, SpeedLines } from './effects.js';
 import { GameAudio } from './audio.js';
 import { Score } from './score.js';
 import { HUD } from './hud.js';
@@ -50,6 +50,11 @@ class Game {
 
         this.smoke = new Particles(this.scene, QUALITY.smoke, 1.15, { opacity: 0.5 });
         this.confetti = new Particles(this.scene, CONFIG.fx.confettiCount, 0.5, { opacity: 0.95, gravity: -7 });
+        // jiskry — additivní blending + HDR (>1) barvy z CONFIG.fx.sparks, ať pod bloomem žhnou
+        this.sparks = new Particles(this.scene, QUALITY.sparks, 0.42, {
+            opacity: 0.95, gravity: CONFIG.fx.sparks.gravity, blending: THREE.AdditiveBlending,
+        });
+        this.speedLines = new SpeedLines(this.scene, QUALITY.speedLines);
         this.tire = new TireMarks(this.scene, CONFIG.fx.tireSegments);
 
         this.score = new Score();
@@ -262,6 +267,36 @@ class Game {
                 Math.cos(a) * sp, 1 + Math.random() * 4, Math.sin(a) * sp,
                 0.6 + Math.random() * 0.4, 0.82, 0.78, 0.7);
         }
+        // snop oranžovo-bílých jisker — rychlé, gravitace, krátký život, HDR emisivní barvy (bloom)
+        const SP = CONFIG.fx.sparks;
+        for (let i = 0; i < SP.smashCount; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const sp = SP.smashSpeedMin + Math.random() * (SP.smashSpeedMax - SP.smashSpeedMin);
+            const hot = Math.random();
+            this.sparks.spawn(p.x, y + 0.5 + Math.random() * 0.4, p.z,
+                Math.cos(a) * sp, SP.smashUpMin + Math.random() * (SP.smashUpMax - SP.smashUpMin), Math.sin(a) * sp,
+                SP.smashLifeMin + Math.random() * (SP.smashLifeMax - SP.smashLifeMin),
+                lerp(SP.coolColor[0], SP.hotColor[0], hot),
+                lerp(SP.coolColor[1], SP.hotColor[1], hot),
+                lerp(SP.coolColor[2], SP.hotColor[2], hot));
+        }
+    }
+
+    // ---------- jiskry od boku vozu — kontakt se zídkou u moře na okraji driftu ----------
+    _wallSparks() {
+        const SP = CONFIG.fx.sparks;
+        const wp = this.road.pointAt(this.van.s, -CONFIG.physics.railLat, 0.45 + Math.random() * 0.3);
+        for (let i = 0; i < SP.wallCount; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const sp = SP.wallSpeedMin + Math.random() * (SP.wallSpeedMax - SP.wallSpeedMin);
+            const hot = Math.random();
+            this.sparks.spawn(wp.x, wp.y, wp.z,
+                Math.cos(a) * sp, SP.wallUpMin + Math.random() * SP.wallUpVar, Math.sin(a) * sp,
+                SP.wallLifeMin + Math.random() * (SP.wallLifeMax - SP.wallLifeMin),
+                lerp(SP.coolColor[0], SP.hotColor[0], hot),
+                lerp(SP.coolColor[1], SP.hotColor[1], hot),
+                lerp(SP.coolColor[2], SP.hotColor[2], hot));
+        }
     }
 
     _splash() {
@@ -359,23 +394,53 @@ class Game {
         this.score.driftTick(dt, drifting, van.speed);
         this.score.distance(Math.max(0, van.vF) * dt);
 
+        // síla skluzu v aktivním driftu (0..1) — řídí hustotu/velikost kouře, viz níže
+        const slipExtra = Math.max(0, Math.abs(van.slipDeg) - CONFIG.score.slipMinDeg);
+        const driftMag = van.state === VanState.DRIFT ? clamp(slipExtra / CONFIG.fx.smokeDriftHardSlip, 0, 1) : 0;
+
         this._smokeAlt ^= 1;
-        if ((drifting || van.offroad) && van.speed > 6 && this._smokeAlt) {
+        // při velkém skluzu se spawnuje každý fixní krok (ne jen napůl) = hustší kouř
+        if ((drifting || van.offroad) && van.speed > 6 && (this._smokeAlt || driftMag > 0.5)) {
             van.rearWheelPos(this._wl, this._wr);
             const off = van.offroad;
-            const [r, g, b] = off ? [0.55, 0.47, 0.35] : [0.88, 0.88, 0.9];
+            let [r, g, b] = off ? [0.55, 0.47, 0.35] : [0.88, 0.88, 0.9];
+            // barva kouře podle denní doby — v noci tmavší/modravější (jednoduchý RGB útlum)
+            const night = this._nightFactor(van.s);
+            r *= lerp(1, CONFIG.fx.smokeNightDim, night);
+            g *= lerp(1, CONFIG.fx.smokeNightDim, night);
+            b = clamp(b * lerp(1, CONFIG.fx.smokeNightDim, night) + CONFIG.fx.smokeNightBlue * night, 0, 1);
+            // víc obláčků na kolo a širší/rychlejší rozptyl při velkém skluzu = vizuálně "hustší a větší" kouř
+            const puffs = 1 + Math.round(driftMag * CONFIG.fx.smokeDriftExtraPuffs);
             for (const w of [this._wl, this._wr]) {
-                this.smoke.spawn(w.x, w.y + 0.2, w.z,
-                    (Math.random() - 0.5) * 2, 1.2 + Math.random() * 1.5, (Math.random() - 0.5) * 2,
-                    0.55 + Math.random() * 0.35, r, g, b);
+                for (let k = 0; k < puffs; k++) {
+                    const jitter = k === 0 ? 0 : 0.35;
+                    this.smoke.spawn(
+                        w.x + (Math.random() - 0.5) * jitter, w.y + 0.2, w.z + (Math.random() - 0.5) * jitter,
+                        (Math.random() - 0.5) * (2 + driftMag * 1.5), 1.2 + Math.random() * (1.5 + driftMag), (Math.random() - 0.5) * (2 + driftMag * 1.5),
+                        0.55 + Math.random() * (0.35 + driftMag * 0.35), r, g, b);
+                }
             }
         }
         van.rearWheelPos(this._wl, this._wr);
         this.tire.add(this._wl, this._wr, drifting);
 
+        // jiskry od boku vozu — kontakt se zídkou u moře na okraji driftu (van.lat blízko railLat)
+        const SP = CONFIG.fx.sparks;
+        const railLat = CONFIG.physics.railLat;
+        if (drifting && van.speed > SP.wallVanSpeedMin && van.lat < -(railLat - SP.wallMargin) && van.lat > -railLat) {
+            if (Math.random() < SP.wallChance) this._wallSparks();
+        }
+
         this._corners(dt, drifting);
         this._nearMiss();
         this._checkpoints(dt);
+    }
+
+    // noční váha (0..1) v daném s — stejný přístup jako GradingPass.update/Sky.update
+    _nightFactor(s) {
+        const { a, b, t } = biomeMix(s);
+        const nightOf = biome => biome.name === 'NOC' ? 1 : 0;
+        return lerp(nightOf(a), nightOf(b), t);
     }
 
     _corners(dt, drifting) {
@@ -490,6 +555,9 @@ class Game {
         this.rig.update(real, van, this.timeScale);
         this.smoke.update(dt);
         this.confetti.update(dt);
+        this.sparks.update(dt);
+        // pocit rychlosti: wind-streak čárky po stranách/nahoře záběru, sílí nad ~24 m/s
+        this.speedLines.update(dt, this.camera, van.speed);
 
         // tunelová akustika
         const inTunnel = this.road.inTunnel(van.s);

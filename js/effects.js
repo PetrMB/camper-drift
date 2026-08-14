@@ -525,6 +525,7 @@ export class Particles {
         this.points = new THREE.Points(geo, new THREE.PointsMaterial({
             size, vertexColors: true, transparent: true, opacity: opts.opacity ?? 0.55,
             depthWrite: false, sizeAttenuation: true, map: dotTexture(),
+            blending: opts.blending ?? THREE.NormalBlending,
         }));
         this.points.frustumCulled = false;
         this.gravity = opts.gravity ?? 0;
@@ -587,5 +588,88 @@ export class TireMarks {
         for (let i = 0; i < this.pos.length; i += 3) this.pos[i + 1] = -100;
         this._has = false;
         this.mesh.geometry.attributes.position.needsUpdate = true;
+    }
+}
+
+// ---------- speed-lines: podélné "wind streak" čárky po stranách/nahoře záběru (pocit rychlosti) ----------
+// Trik: čárka vznikne jako pevný bod ve světě, kousek před kamerou a po straně. Kamera (spolu
+// s vozem) se ale rychle sune vpřed, takže čárka sama "prosviští" kolem ní — nepotřebuje vlastní
+// rychlost ani per-frame přepočet pozice. Krátká životnost ji zrecykluje dřív, než by se dostala
+// za kameru. Update je tak extrémně levný: u živých čárek se jen odpočítává život, žádné alokace.
+export class SpeedLines {
+    constructor(scene, count) {
+        this.SL = CONFIG.fx.speedLines;
+        this.count = count;
+        this.pos = new Float32Array(count * 6);   // 2 vrcholy (úsečka) × 3 souřadnice
+        this.life = new Float32Array(count);
+        this.maxLife = new Float32Array(count);
+        for (let i = 0; i < count; i++) { this.pos[i * 6 + 1] = -500; this.pos[i * 6 + 4] = -500; }
+
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
+        const c = this.SL.color;
+        this.mesh = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
+            color: new THREE.Color(c[0], c[1], c[2]), fog: false,
+            transparent: true, opacity: this.SL.opacity, depthWrite: false,
+            blending: THREE.AdditiveBlending,
+        }));
+        this.mesh.frustumCulled = false;
+        this.mesh.renderOrder = 12;
+        scene.add(this.mesh);
+
+        this.head = 0;
+        this._acc = 0;
+        this._right = new THREE.Vector3();
+        this._up = new THREE.Vector3();
+        this._back = new THREE.Vector3();
+        this._rng = makeRng(9001);
+    }
+    _spawn(camPos, t) {
+        const SL = this.SL, rng = this._rng;
+        const i = this.head; this.head = (this.head + 1) % this.count;
+        const side = rng() < 0.5 ? -1 : 1;
+        const lat = side * (SL.xMin + rng() * (SL.xMax - SL.xMin));
+        const up = SL.yMin + rng() * (SL.yMax - SL.yMin);
+        const zNear = SL.zNear + rng() * 1.5;
+        const len = SL.lenMin + t * (SL.lenMax - SL.lenMin) * (0.6 + rng() * 0.4);
+
+        // fwd = -_back (kamera hledí lokálně do -Z, sloupec matice je tedy "dozadu")
+        const o = i * 6;
+        this.pos[o]     = camPos.x + this._right.x * lat + this._up.x * up - this._back.x * zNear;
+        this.pos[o + 1] = camPos.y + this._right.y * lat + this._up.y * up - this._back.y * zNear;
+        this.pos[o + 2] = camPos.z + this._right.z * lat + this._up.z * up - this._back.z * zNear;
+        const z2 = zNear + len;
+        this.pos[o + 3] = camPos.x + this._right.x * lat + this._up.x * up - this._back.x * z2;
+        this.pos[o + 4] = camPos.y + this._right.y * lat + this._up.y * up - this._back.y * z2;
+        this.pos[o + 5] = camPos.z + this._right.z * lat + this._up.z * up - this._back.z * z2;
+
+        this.life[i] = this.maxLife[i] = SL.life;
+    }
+    _hide(i) {
+        const o = i * 6;
+        this.pos[o + 1] = -500; this.pos[o + 4] = -500;
+    }
+    update(dt, camera, speed) {
+        const SL = this.SL;
+        const t = clamp((speed - SL.speedMin) / (SL.speedMax - SL.speedMin), 0, 1);
+        let dirty = false;
+        if (t > 0) {
+            camera.updateMatrixWorld();
+            camera.matrixWorld.extractBasis(this._right, this._up, this._back);
+            this._acc += dt * lerp(SL.rateMin, SL.rateMax, t);
+            while (this._acc >= 1) {
+                this._acc -= 1;
+                this._spawn(camera.position, t);
+                dirty = true;
+            }
+        } else {
+            this._acc = 0;
+        }
+        for (let i = 0; i < this.count; i++) {
+            if (this.life[i] <= 0) continue;
+            this.life[i] -= dt;
+            if (this.life[i] <= 0) { this._hide(i); dirty = true; }
+        }
+        if (dirty) this.mesh.geometry.attributes.position.needsUpdate = true;
     }
 }
