@@ -223,7 +223,8 @@ export class Sky {
         this.sunGlow.position.copy(this._sunWorld);
         this.sunGlow.scale.setScalar(glowSize);
         this.sunGlow.material.color.copy(this.sunColor).multiplyScalar(1.15);
-        this.sunGlow.material.opacity = 0.6 * sunVis;
+        // nízko nad obzorem slabší glow, ať additivní součet s jádrem nepřepálí kotouč do běla
+        this.sunGlow.material.opacity = lerp(0.38, 0.6, heightN) * sunVis;
 
         // měsíc + hvězdy — mizí/objevují se plynule s noční váhou
         this.moonCore.position.copy(this._sunWorld);

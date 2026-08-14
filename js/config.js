@@ -155,8 +155,8 @@ export const CONFIG = {
         sunCoreBoostHigh: 1.6, // multiplikátor jasu jádra vysoko na obloze (menší bílé slunce může být jasnější)
         sunHeightMin: 0.22,    // rozsah normalizované výšky slunce (sunDir.y) pro škálování
         sunHeightMax: 0.395,   // odpovídá sunDir.y poledního slunce (sunPos [30,25,-50]) => heightN ~= 1
-        moonSize: 13,
-        moonGlowSize: 46,
+        moonSize: 22,
+        moonGlowSize: 70,
         starRadius: 430,       // poloměr kopule s hvězdami
         flareOffsets: [0.3, 0.56, 0.86],   // pozice na ose slunce->střed obrazu (0=u slunce, 1=u středu)
         flareSizes: [11, 20, 8],
