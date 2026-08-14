@@ -24,7 +24,7 @@ class Game {
 
         this.audio = new GameAudio();
         this.env = new WorldEnv(this.scene, QUALITY);
-        this.sky = new Sky(this.scene);
+        this.sky = new Sky(this.scene, QUALITY);
         this.ridges = new Ridges(this.scene);
         this.sea = new Sea(this.scene, QUALITY);
         this.props = new Props(this.scene);
@@ -459,7 +459,7 @@ class Game {
         van.render(this.state === 'start' ? 1 : clamp(this.acc / FIXED, 0, 1), dt);
         this.env.update(van.s, van.pos, this.road);
         const sunDir = this.env.sun.position.clone().sub(this.env.sun.target.position).normalize();
-        this.sky.update(van.s, this.camera.position, sunDir);
+        this.sky.update(van.s, this.camera, sunDir);
         this.ridges.update(van.s, this.camera.position, van.s);
         this.sea.update(this.t, van.s, this.camera.position, this.scene.fog);
         this.fleet.update(dt, this.t, van.s, this.road);

@@ -145,6 +145,21 @@ export const CONFIG = {
 
     dayLength: 2000,          // m na denní dobu
     dayBlend: 260,            // m přechodové pásmo
+
+    sky: {
+        sunSizeLow: 30,        // poloměr slunečního kotouče nízko nad obzorem (m)
+        sunSizeHigh: 12,       // poloměr vysoko na obloze (v poledne)
+        sunGlowLow: 100,       // poloměr měkkého glow sprite (nízko)
+        sunGlowHigh: 40,       // poloměr glow sprite (vysoko)
+        sunHeightMin: 0.22,    // rozsah normalizované výšky slunce (sunDir.y) pro škálování
+        sunHeightMax: 0.82,
+        moonSize: 13,
+        moonGlowSize: 46,
+        starRadius: 430,       // poloměr kopule s hvězdami
+        flareOffsets: [0.3, 0.56, 0.86],   // pozice na ose slunce->střed obrazu (0=u slunce, 1=u středu)
+        flareSizes: [11, 20, 8],
+        flareOpac: [0.22, 0.16, 0.11],
+    },
 };
 
 export const IS_MOBILE =
@@ -152,8 +167,8 @@ export const IS_MOBILE =
     (navigator.maxTouchPoints > 1 || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent));
 
 export const QUALITY = IS_MOBILE
-    ? { pixelRatio: 1.5, shadow: 1024, bloomScale: 0.5, antialias: false, smoke: 128, seaSegs: 40 }
-    : { pixelRatio: Math.min(window.devicePixelRatio || 1, 2), shadow: 2048, bloomScale: 1, antialias: true, smoke: 224, seaSegs: 72 };
+    ? { pixelRatio: 1.5, shadow: 1024, bloomScale: 0.5, antialias: false, smoke: 128, seaSegs: 40, stars: 380 }
+    : { pixelRatio: Math.min(window.devicePixelRatio || 1, 2), shadow: 2048, bloomScale: 1, antialias: true, smoke: 224, seaSegs: 72, stars: 750 };
 
 export function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 export function lerp(a, b, t) { return a + (b - a) * t; }
