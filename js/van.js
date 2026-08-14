@@ -13,7 +13,7 @@ const HYMER_GLB_LENGTH = 4.43;
 const HYMER_TARGET_LENGTH = 4.9;
 const HYMER_GLB_SCALE = HYMER_TARGET_LENGTH / HYMER_GLB_LENGTH; // ~1.106
 // rotace kolem Y tak, aby předek (kabina/čelní sklo) mířil do herního +Z (yaw=0); ověřeno vizuálně screenshotem
-const HYMER_GLB_YAW = -Math.PI / 2;
+const HYMER_GLB_YAW = Math.PI / 2;
 let _hymerGLTFCache = null; // sdílený loader promise, kdyby vzniklo víc instancí Van
 
 // ---------- model ----------
