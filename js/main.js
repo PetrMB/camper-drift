@@ -46,6 +46,7 @@ class Game {
         const post = setupComposer(this.renderer, this.scene, this.camera, QUALITY);
         this.composer = post.composer;
         this.bloom = post.bloom;
+        this.grading = post.grading;
 
         this.smoke = new Particles(this.scene, QUALITY.smoke, 1.15, { opacity: 0.5 });
         this.confetti = new Particles(this.scene, CONFIG.fx.confettiCount, 0.5, { opacity: 0.95, gravity: -7 });
@@ -478,6 +479,8 @@ class Game {
         const sunDir = this.env.sun.position.clone().sub(this.env.sun.target.position).normalize();
         this.sky.update(van.s, this.camera, sunDir);
         this.ridges.update(van.s, this.camera.position, van.s);
+        this.grading.update(van.s);
+        this.grading.uniforms.uSpeed.value = clamp(van.speed / CONFIG.post.speedNorm, 0, 1);
         this.sea.update(this.t, van.s, this.camera.position, this.scene.fog);
         this.fleet.update(dt, this.t, van.s, this.road);
         // provoz per-frame (ve fixním kroku by se auta vůči kameře cukala)
