@@ -143,6 +143,29 @@ export const CONFIG = {
         slowmoTime: 0.4,
     },
 
+    sea: {
+        ampBoostNear: 0.4,        // max. násobek amplitudy vln blízko kamery
+        ampBoostDist: 140,        // m — do jaké vzdálenosti boost dozní
+        sunShininessNarrow: 90,   // úzký spekulární lalok (jádro sluneční stopy) — sníženo z 200, dřív přes pow() zesiloval per-pixel aliasing třpytu do šachovnice
+        sunShininessWide: 7,      // širší měkký glow kolem stopy — dál rozšířeno (nižší exponent), ať je třpyt vidět z víc úhlů/kamerových natočení i v poledne
+        sunShininessWideNight: 30, // v noci mnohem užší lalok — široký na řídké síti dělá ostré ploché skvrny
+        sunWideMix: 0.3,          // váha širšího glow vůči úzkému laloku — s clampem barvy (viz shader) může zůstat vyšší, aniž by při západu zaplavil hladinu
+        sunWideMixNightScale: 0.4, // ztlumení wide laloku v noci
+        sunGlintStrength: 1.3,    // celková síla odlesku — sníženo z 2.4, s clampem barvy (viz shader) dává úzkou zářivou dráhu místo floodlightu
+        sunGlintNight: 0.2,       // ztlumení v noci (měsíční stříbrná stopa)
+        specFadeNear: 55,         // m — odlesk dozní k nule mezi near/far (potlačí aliasing periodických vln u obzoru)
+        specFadeFar: 190,
+        glitterAmp: 0.012,        // síla mikro-třpytu — láme lalok na jiskřičky (dál sníženo, viz i frekvence + fade níže)
+        glitterFadeNear: 22,      // m — od této vzdálenosti mikro-třpyt začíná mizet (drží ho jen blízko kamery)
+        glitterFadeFar: 45,       // m — za touto vzdáleností je mikro-třpyt už nulový -> žádný per-pixel screen-door na zbytku hladiny
+        foamThreshold: 0.78,      // práh výška+strmost -> zpěněný hřeben (sníženo z 1.55 — reálný rozsah vH/vSteep [0..~2.5] ho nikdy nepřekročil, pěna se nikdy nezobrazila)
+        foamSoftness: 0.3,        // šířka přechodu prahu (smoothstep)
+        foamSteepWeight: 2.6,     // váha strmosti vlny v prahu pěny (zvýšeno, ať strmé hřebeny pěnu spíš vyvolají)
+        foamIntensity: 0.55,      // krytí bílou barvou v hřebeni (mírně sníženo z 0.75, ať jsou čepičky jemné a jen občasné, ne plná bílá plocha)
+        shoreDist: 100,           // m od kamery — dosah mělčinového tyrkysu
+        shoreStrength: 0.5,       // síla mělčinového přísvitu blízko pobřeží/kamery
+    },
+
     dayLength: 2000,          // m na denní dobu
     dayBlend: 260,            // m přechodové pásmo
 

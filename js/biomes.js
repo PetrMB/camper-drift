@@ -54,6 +54,7 @@ export function lerpColor(target, hexA, hexB, t) {
 // ---------- moře s vlnami ----------
 export class Sea {
     constructor(scene, quality) {
+        const S = CONFIG.sea;
         this.uniforms = {
             uTime: { value: 0 },
             uDeep: { value: new THREE.Color(0x1470a8) },
@@ -61,6 +62,27 @@ export class Sea {
             uFogColor: { value: new THREE.Color(0xdff0ff) },
             uFogNear: { value: 170 },
             uFogFar: { value: 560 },
+            // sluneční glitter (odlesková stopa) — plněno z biomeMix v update()
+            uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+            uSunColor: { value: new THREE.Color(0xfff1cf) },
+            uSunGlint: { value: S.sunGlintStrength },
+            // konstanty laditelné z CONFIG.sea (nastaveny jednou, beze změny za běhu)
+            uAmpBoost: { value: S.ampBoostNear },
+            uAmpDist: { value: S.ampBoostDist },
+            uSpecNarrow: { value: S.sunShininessNarrow },
+            uSpecWide: { value: S.sunShininessWide },
+            uWideMix: { value: S.sunWideMix },
+            uGlitterAmp: { value: S.glitterAmp },
+            uGlitterFadeNear: { value: S.glitterFadeNear },
+            uGlitterFadeFar: { value: S.glitterFadeFar },
+            uFoamThreshold: { value: S.foamThreshold },
+            uFoamSoftness: { value: S.foamSoftness },
+            uFoamSteepW: { value: S.foamSteepWeight },
+            uFoamIntensity: { value: S.foamIntensity },
+            uShoreDist: { value: S.shoreDist },
+            uShoreStrength: { value: S.shoreStrength },
+            uSpecFadeNear: { value: S.specFadeNear },
+            uSpecFadeFar: { value: S.specFadeFar },
         };
         const geo = new THREE.PlaneGeometry(1600, 1600, quality.seaSegs, quality.seaSegs);
         geo.rotateX(-Math.PI / 2);
@@ -68,24 +90,110 @@ export class Sea {
             uniforms: this.uniforms,
             vertexShader: `
                 uniform float uTime;
-                varying float vH; varying float vDist;
+                uniform float uAmpBoost; uniform float uAmpDist;
+                varying float vH; varying float vDist; varying float vSteep;
+                varying vec3 vNormalW; varying vec3 vWorldPos;
                 void main(){
                     vec4 wp = modelMatrix * vec4(position, 1.0);
-                    float h = sin(wp.x * 0.08 + uTime * 0.9) * 0.5
-                            + sin(wp.z * 0.11 + uTime * 0.7) * 0.4
-                            + sin((wp.x + wp.z) * 0.045 + uTime * 0.5) * 0.6;
+
+                    // amplituda vln roste blízko kamery (mesh je snapnutý pod kameru,
+                    // takže lokální position.xz už je zhruba offset od kamery — levné, bez matic navíc)
+                    float distC = length(position.xz);
+                    float ampBoost = 1.0 + uAmpBoost * (1.0 - smoothstep(0.0, uAmpDist, distC));
+
+                    // šest sinusových oktáv různých směrů/frekvencí — gerstnerovský dojem za levnou cenu.
+                    // a3/a4 jsou záměrně nízkofrekvenční (vlnová délka bezpečně nad ~2x velikost mřížky sítě,
+                    // desktop 72 seg ~22 m/buňka, mobil 40 seg ~40 m/buňka) — vyšší frekvence by se na tak
+                    // řídké mřížce vertex-aliasovaly a přes spekulární mocninu vykreslily jako rušivý moaré pruh.
+                    float a0 = wp.x * 0.08 + uTime * 0.9;
+                    float a1 = wp.z * 0.11 + uTime * 0.7;
+                    float a2 = (wp.x + wp.z) * 0.045 + uTime * 0.5;
+                    float a3 = wp.x * 0.055 - wp.z * 0.025 + uTime * 1.3;
+                    float a4 = wp.x * 0.012 + wp.z * 0.058 - uTime * 1.1;
+                    float a5 = wp.x * 0.03 - wp.z * 0.045 + uTime * 0.35;
+
+                    float h = (sin(a0) * 0.5 + sin(a1) * 0.4 + sin(a2) * 0.6
+                             + sin(a3) * 0.22 + sin(a4) * 0.18 + sin(a5) * 0.28) * ampBoost;
                     wp.y += h * 0.35;
                     vH = h;
+
+                    // analytické derivace výšky -> normála vlny. Pro normálu/strmost (spekulární odlesk +
+                    // pěna) záměrně bereme jen a0/a1/a2/a5 — a3/a4 sice obohacují tvar/barvu hladiny (výše),
+                    // ale jejich derivace by i při bezpečné frekvenci zbytečně přidávala směrovou složku
+                    // navíc do laloku; takhle zůstává odlesk čistý a beze změny chování z ladění.
+                    float dHdx = (0.08 * 0.5 * cos(a0) + 0.045 * 0.6 * cos(a2)
+                                + 0.03 * 0.28 * cos(a5)) * ampBoost;
+                    float dHdz = (0.11 * 0.4 * cos(a1) + 0.045 * 0.6 * cos(a2)
+                                - 0.045 * 0.28 * cos(a5)) * ampBoost;
+                    vNormalW = normalize(vec3(-dHdx * 0.35, 1.0, -dHdz * 0.35));
+                    vSteep = length(vec2(dHdx, dHdz));
+
+                    vWorldPos = wp.xyz;
                     vec4 mv = viewMatrix * wp;
                     vDist = -mv.z;
                     gl_Position = projectionMatrix * mv;
                 }`,
             fragmentShader: `
+                uniform float uTime;
                 uniform vec3 uDeep; uniform vec3 uLight;
                 uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar;
-                varying float vH; varying float vDist;
+                uniform vec3 uSunDir; uniform vec3 uSunColor; uniform float uSunGlint;
+                uniform float uSpecNarrow; uniform float uSpecWide; uniform float uWideMix; uniform float uGlitterAmp;
+                uniform float uGlitterFadeNear; uniform float uGlitterFadeFar;
+                uniform float uFoamThreshold; uniform float uFoamSoftness; uniform float uFoamSteepW; uniform float uFoamIntensity;
+                uniform float uShoreDist; uniform float uShoreStrength;
+                uniform float uSpecFadeNear; uniform float uSpecFadeFar;
+                varying float vH; varying float vDist; varying float vSteep;
+                varying vec3 vNormalW; varying vec3 vWorldPos;
                 void main(){
+                    // hloubkový gradient: základní deep/light mix podle výšky vlny
                     vec3 c = mix(uDeep, uLight, clamp(vH * 0.35 + 0.45, 0.0, 1.0));
+                    // + mělčinový (tyrkysový) přísvit blízko kamery/pobřeží — voda "průzračnější"
+                    vec3 shallow = clamp(uLight * 1.35 + vec3(0.05, 0.14, 0.10), 0.0, 1.0);
+                    float shoreT = (1.0 - smoothstep(0.0, uShoreDist, vDist)) * uShoreStrength;
+                    c = mix(c, shallow, shoreT);
+
+                    // po konci mělčinového přechodu (uShoreDist) plynule dotáhni barvu k mlžné barvě
+                    // ještě PŘED skutečným fogNear — jinak v pásmu shoreDist..fogNear (typicky při
+                    // západu, kde je fogNear až 130 m) prosvítá syrová hlubinová barva (indigový flek)
+                    float preFogEdge = max(uFogNear, uShoreDist + 1.0);
+                    float preFog = smoothstep(uShoreDist, preFogEdge, vDist) * 0.65;
+                    c = mix(c, uFogColor, preFog);
+
+                    // mikro-třpyt navrch na analytickou normálu vlny — láme spekulární lalok na jiskřičky.
+                    // Nízká frekvence (byla 1.7/2.4 — příliš vysoká pro fragment-space sin() vzorkovaný
+                    // po pixelech, aliasovala do plošné šachovnice) + útlum s rostoucí vzdáleností od
+                    // kamery, ať třpyt zůstane jen blízkým jiskřičkám a nezaplaví celou hladinu mřížkou.
+                    vec3 N = normalize(vNormalW);
+                    float glitFade = 1.0 - smoothstep(uGlitterFadeNear, uGlitterFadeFar, vDist);
+                    float g1 = sin(vWorldPos.x * 0.35 + vWorldPos.z * 0.27 + uTime * 1.9);
+                    float g2 = sin(vWorldPos.x * 0.5 - vWorldPos.z * 0.44 + uTime * 2.7);
+                    N = normalize(N + vec3(g1, 0.0, g2) * uGlitterAmp * glitFade);
+
+                    // sluneční glitter / odlesková stopa (Blinn-Phong přes half-vector)
+                    vec3 V = normalize(cameraPosition - vWorldPos);
+                    vec3 H = normalize(V + uSunDir);
+                    float NdotH = max(dot(N, H), 0.0);
+                    float narrow = pow(NdotH, uSpecNarrow);
+                    float wide = pow(NdotH, uSpecWide) * uWideMix;
+                    // Fresnel jen jemně přisvětlí lalok u okraje — silnější grazing-boost by u nízké kamery
+                    // roztáhl třpyt přes celou hladinu (a s ním i aliasing periodické vlny)
+                    float fres = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0);
+                    // odlesk dozní se vzdáleností — periodická vlnová normála by jinak u obzoru aliasovala
+                    // (moc cyklů na málo pixelů), navíc to fyzikálně sedí: třpyt je nejsilnější blízko diváka
+                    float specFade = 1.0 - smoothstep(uSpecFadeNear, uSpecFadeFar, vDist);
+                    float sunSpec = (narrow + wide) * (0.75 + 0.35 * fres) * uSunGlint * specFade;
+                    c += uSunColor * sunSpec;
+                    // clamp před foam/fog mixem — bez toho se widelalok při nízkém slunci (západ) přes
+                    // velkou plochu vody sečte do ploché přepálené bílé/oranžové "podlahy" (floodlight)
+                    // místo definované třpytivé dráhy; clamp nechá jádro jasné, ale ořízne plošné přesvícení
+                    c = clamp(c, 0.0, 1.15);
+
+                    // zpěněné hřebeny — práh na výšce + strmosti vlny (jemný smoothstep)
+                    float foamRaw = vH + vSteep * uFoamSteepW;
+                    float foam = smoothstep(uFoamThreshold - uFoamSoftness, uFoamThreshold + uFoamSoftness, foamRaw);
+                    c = mix(c, vec3(1.0), foam * uFoamIntensity);
+
                     float f = clamp((vDist - uFogNear) / (uFogFar - uFogNear), 0.0, 1.0);
                     gl_FragColor = vec4(mix(c, uFogColor, f), 1.0);
                 }`,
@@ -106,6 +214,24 @@ export class Sea {
         this.uniforms.uFogFar.value = fog.far;
         this.mesh.position.x = Math.round(camPos.x / 8) * 8;
         this.mesh.position.z = Math.round(camPos.z / 8) * 8;
+
+        // sluneční směr/barva pro odlesk — stejná konstrukce jako WorldEnv.sun (position - target),
+        // aby stopa na vodě mířila přesně ke skutečnému slunečnímu kotouči na obloze
+        const sx = lerp(a.sunPos[0], b.sunPos[0], mt);
+        const sy = lerp(a.sunPos[1], b.sunPos[1], mt);
+        const sz = lerp(a.sunPos[2], b.sunPos[2], mt);
+        this.uniforms.uSunDir.value.set(sx, sy + 10, sz).normalize();
+        lerpColor(this.uniforms.uSunColor.value, a.sun, b.sun, mt);
+        // v noci ztlum odlesk na měsíční stříbrnou ~20 % (barva NOC je už stříbrošedá)
+        const glintOf = biome => biome.name === 'NOC' ? CONFIG.sea.sunGlintNight : 1.0;
+        const nightK = lerp(glintOf(a), glintOf(b), mt);
+        this.uniforms.uSunGlint.value = CONFIG.sea.sunGlintStrength * nightK;
+        // široký lalok je v noci nutné zúžit a ztlumit — na řídké síti moře jinak
+        // per-vertex interpolace normály slévá odlesk do plochých ostře ohraničených skvrn
+        const S = CONFIG.sea;
+        const dayT = clamp((nightK - S.sunGlintNight) / (1 - S.sunGlintNight), 0, 1);
+        this.uniforms.uSpecWide.value = lerp(S.sunShininessWideNight, S.sunShininessWide, dayT);
+        this.uniforms.uWideMix.value = S.sunWideMix * lerp(S.sunWideMixNightScale, 1, dayT);
     }
 }
 
