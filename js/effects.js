@@ -104,8 +104,11 @@ const GradingShader = {
             vec3 color = vec3(r, g, b);
 
             // --- kontrast kolem pivotu 0.5, mírně zesílený při vysoké rychlosti ---
+            // soft-knee na obou koncích: lineární kontrast by rušil ACES rolloff a
+            // vypaloval highlighty (západ nad mořem) resp. propaloval noční stíny
             float contrast = uContrast + uSpeed * uSpeedContrastBoost;
-            color = (color - 0.5) * contrast + 0.5;
+            vec3 cc = (color - 0.5) * contrast;
+            color = 0.5 + cc / (1.0 + max(vec3(0.0), abs(cc) - 0.35) * 1.5);
 
             // --- saturace, luma-preserving ---
             float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
