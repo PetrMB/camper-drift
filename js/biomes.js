@@ -609,7 +609,7 @@ export class Props {
         // levandulové/olivové keříky roztroušené po pevnině
         for (let s = chunk.s0 + 4; s < chunk.s1 - 3; s += PR.bushSpacingMin + rng() * (PR.bushSpacingMax - PR.bushSpacingMin)) {
             if (inTunnel(s)) continue;
-            const lat = 3.6 + rng() * 26;
+            const lat = (CONFIG.road.width / 2 + 0.6) + rng() * 26; // vždy mimo vozovku i krajnici
             const p = road.pointAt(s, lat);
             const y = p.y + lat * 0.055;
             const sc = 0.55 + rng() * 0.5;
