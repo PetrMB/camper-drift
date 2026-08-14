@@ -221,8 +221,8 @@ export class Van {
         this.s = proj.s; this.lat = proj.lat;
         this.visY = proj.y; this.slope = proj.slope;
 
-        // řízení: plynulý posun cílové stopy v pruhu
-        this.steerLat += (steer * P.steerLatMax - this.steerLat) * Math.min(1, P.steerLatLerp * dt);
+        // řízení: šipky posouvají cílovou stopu, po puštění drží pozici (bez auto-rovnání do středu)
+        this.steerLat = clamp(this.steerLat + steer * P.steerLatRate * dt, -P.steerLatMax, P.steerLatMax);
         const look = Math.max(P.lookaheadMin, Math.abs(this.vF) * P.lookaheadT);
         const kAhead = road.kappaAt(this.s + look);
         const kNow = proj.kappa;

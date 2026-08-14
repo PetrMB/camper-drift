@@ -32,7 +32,7 @@ export const CONFIG = {
 
         steerResponse: 9,     // lerp úhlové rychlosti
         steerLatMax: 3.3,     // max boční ofset řízením (m)
-        steerLatLerp: 4.5,    // rychlost přesunu v pruhu
+        steerLatRate: 5.5,    // m/s posunu stopy při plném vychýlení (stopa drží, nevrací se)
         steerDriftBias: 1.4,  // vliv řízení na drift (rad/s při plném vychýlení)
         driftSteerMul: 2.6,   // o kolik víc se stáčí nos v driftu
         driftKappaMin: 0.015, // minimální "apex" křivost driftu
