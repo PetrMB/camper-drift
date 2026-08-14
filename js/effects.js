@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { CONFIG, clamp, lerp, makeRng } from './config.js';
 import { biomeMix, lerpColor } from './biomes.js';
@@ -22,13 +23,132 @@ export function setupRenderer(canvas, quality) {
 }
 
 export function setupComposer(renderer, scene, camera, quality) {
+    const PP = CONFIG.post;
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
     const size = new THREE.Vector2(window.innerWidth * quality.bloomScale, window.innerHeight * quality.bloomScale);
-    const bloom = new UnrealBloomPass(size, 0.35, 0.6, 0.85);
+    const bloom = new UnrealBloomPass(size, PP.bloomStrength, PP.bloomRadius, PP.bloomThreshold);
     composer.addPass(bloom);
     composer.addPass(new OutputPass());
-    return { composer, bloom };
+    // grading pass AŽ ZA OutputPassem: composer běží nad lineárním HDR bufferem (HalfFloat
+    // render target) a teprve OutputPass dělá ACES tonemapping + sRGB konverzi. Kontrast/vinětace/
+    // aberace jsou definované pro zobrazovací (0..1, gamma) prostor — zkoušelo se vložit tento pass
+    // před OutputPass dle původního zadání, ale kontrast s pivotem 0.5 aplikovaný na lineární HDR
+    // hodnoty (noční obloha ~0.02-0.05) drasticky propaloval stíny do černé (ověřeno screenshoty).
+    // Za OutputPassem pracuje nad už vyladěným obrazem stejně jako typický LUT/vignette v enginu.
+    const grading = new GradingPass();
+    composer.addPass(grading);
+    return { composer, bloom, grading };
+}
+
+// ---------- grading pass — kontrast/saturace/vinětace/chromatická aberace ----------
+// Poslední fullscreen ShaderPass, za OutputPassem — pracuje nad finálním tonemapovaným
+// a sRGB-zakódovaným obrazem (viz komentář v setupComposer výše), takže hodnoty v CONFIG.post
+// (kontrast kolem pivotu 0.5 apod.) odpovídají běžnému zobrazovacímu rozsahu 0..1.
+const GradingShader = {
+    name: 'GradingShader',
+    uniforms: {
+        tDiffuse: { value: null },
+        uResolution: { value: new THREE.Vector2(1, 1) },
+        uContrast: { value: CONFIG.post.contrast },
+        uSaturation: { value: CONFIG.post.saturation },
+        uVignette: { value: CONFIG.post.vignette },
+        uVignetteRadius: { value: CONFIG.post.vignetteRadius },
+        uVignetteSoftness: { value: CONFIG.post.vignetteSoftness },
+        uAberration: { value: CONFIG.post.aberrationPx },
+        uAberrationStart: { value: CONFIG.post.aberrationStart },
+        uShadowTint: { value: new THREE.Vector3(0, 0, 0) },
+        uTintAmount: { value: CONFIG.post.tintAmount },
+        uSpeed: { value: 0 },                                        // 0..1, viz main.js
+        uSpeedContrastBoost: { value: CONFIG.post.speedContrastBoost },
+        uSpeedAberrationPx: { value: CONFIG.post.speedAberrationPx },
+    },
+    vertexShader: `
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+    fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform vec2 uResolution;
+        uniform float uContrast;
+        uniform float uSaturation;
+        uniform float uVignette;
+        uniform float uVignetteRadius;
+        uniform float uVignetteSoftness;
+        uniform float uAberration;
+        uniform float uAberrationStart;
+        uniform vec3 uShadowTint;
+        uniform float uTintAmount;
+        uniform float uSpeed;
+        uniform float uSpeedContrastBoost;
+        uniform float uSpeedAberrationPx;
+        varying vec2 vUv;
+
+        void main() {
+            vec2 uv = vUv;
+            vec2 toCenter = uv - 0.5;
+            float rawDist = length(toCenter);           // 0 (střed) .. ~0.7071 (roh)
+            float dist = rawDist * 1.41421356;           // normalizováno na 0..1 (roh = 1.0)
+            vec2 dir = rawDist > 0.0001 ? toCenter / rawDist : vec2(0.0);
+
+            // --- chromatická aberace: R/B kanály se rozestoupí od středu, roste s dist a rychlostí ---
+            float edgeT = smoothstep(uAberrationStart, 1.0, dist);
+            float aberPx = (uAberration + uSpeed * uSpeedAberrationPx) * edgeT;
+            vec2 off = dir * (aberPx / uResolution);
+            vec4 baseCol = texture2D(tDiffuse, uv);
+            float r = texture2D(tDiffuse, uv + off).r;
+            float g = baseCol.g;
+            float b = texture2D(tDiffuse, uv - off).b;
+            vec3 color = vec3(r, g, b);
+
+            // --- kontrast kolem pivotu 0.5, mírně zesílený při vysoké rychlosti ---
+            // soft-knee na obou koncích: lineární kontrast by rušil ACES rolloff a
+            // vypaloval highlighty (západ nad mořem) resp. propaloval noční stíny
+            float contrast = uContrast + uSpeed * uSpeedContrastBoost;
+            vec3 cc = (color - 0.5) * contrast;
+            color = 0.5 + cc / (1.0 + max(vec3(0.0), abs(cc) - 0.35) * 1.5);
+
+            // --- saturace, luma-preserving ---
+            float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+            color = mix(vec3(luma), color, uSaturation);
+
+            // --- jemný teplotní nádech stínů podle denní doby (modrá v noci, teplá za soumraku) ---
+            float shadowMask = 1.0 - smoothstep(0.0, 0.45, luma);
+            color += uShadowTint * shadowMask * uTintAmount;
+
+            // --- měkká vinětace jen v rozích, čistý střed = silnice zůstává čitelná ---
+            float vig = 1.0 - uVignette * smoothstep(uVignetteRadius, uVignetteRadius + uVignetteSoftness, dist);
+            color *= vig;
+
+            gl_FragColor = vec4(max(color, 0.0), baseCol.a);
+        }`,
+};
+
+export class GradingPass extends ShaderPass {
+    constructor() {
+        super(GradingShader);
+        this._tintNight = new THREE.Vector3(...CONFIG.post.tintNight);
+        this._tintWarm = new THREE.Vector3(...CONFIG.post.tintWarm);
+    }
+    // render target (a tedy i texel) je vždy o velikosti skutečného framebufferu — composer
+    // volá setSize při vytvoření i při resize, takže px->uv převod v shaderu zůstává přesný
+    setSize(width, height) {
+        this.uniforms.uResolution.value.set(width, height);
+    }
+    // nádech stínů podle denní doby — volá se z hlavní smyčky (main.js) s ujetou vzdáleností s,
+    // stejně jako Sky.update/Ridges.update; při neznámé/neutrální denní době zůstává nádech nulový
+    update(s) {
+        const { a, b, t } = biomeMix(s);
+        const nightOf = biome => biome.name === 'NOC' ? 1 : 0;
+        const warmOf = biome => (biome.name === 'ZÁPAD SLUNCE' || biome.name === 'RÁNO') ? 1 : 0;
+        const night = lerp(nightOf(a), nightOf(b), t);
+        const warm = lerp(warmOf(a), warmOf(b), t);
+        this.uniforms.uShadowTint.value.set(0, 0, 0)
+            .addScaledVector(this._tintNight, night)
+            .addScaledVector(this._tintWarm, warm);
+    }
 }
 
 // ---------- textury pro slunce/měsíc/hvězdy (měkký glow, ostřejší jádro) ----------

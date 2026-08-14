@@ -201,6 +201,32 @@ export const CONFIG = {
         streakSize: [130, 3.2], // [délka, výška] horizontálního "anamorfního" streak prvku (m)
         streakOpac: 0.4,
     },
+
+    // post-processing — filmový arkádový look (NFS Hot Pursuit): bloom + grading pass
+    post: {
+        // bloom (UnrealBloomPass) — jemně zesíleno oproti výchozím hodnotám three.js,
+        // ať světla/slunce/odrazky víc žhnou, ale slunce na obloze nesmí vypálit půl obrazu
+        bloomStrength: 0.42,
+        bloomRadius: 0.6,
+        bloomThreshold: 0.88,
+
+        // grading pass (vlastní ShaderPass, vložený před OutputPass)
+        contrast: 1.06,          // kontrast kolem pivotu 0.5 (1 = beze změny)
+        saturation: 1.15,        // sytost barev, luma-preserving (1 = beze změny)
+        vignette: 0.30,          // síla ztmavení v rozích (0..1)
+        vignetteRadius: 0.58,    // poloměr (0=střed, 1=roh), od kterého vinětace začíná narůstat
+        vignetteSoftness: 0.42,  // šířka přechodu — čím víc, tím měkčí okraj (nezasahuje střed/silnici)
+        aberrationPx: 1.5,       // chromatická aberace na okraji obrazu (px), 0 ve středu
+        aberrationStart: 0.35,   // poloměr (0=střed, 1=roh), od kterého aberace začíná narůstat
+        tintAmount: 0.55,        // síla teplotního nádechu stínů podle denní doby (0 = vypnuto)
+        tintNight: [-0.018, -0.006, 0.036],  // studený (modrý) nádech stínů v noci
+        tintWarm: [0.032, 0.013, -0.02],     // teplý (oranžový) nádech stínů za západu/rána
+
+        // speed-tint — jemné zesílení kontrastu/aberace na krajích při vysoké rychlosti (uSpeed 0..1)
+        speedNorm: 34,             // m/s odpovídající uSpeed = 1 (~max tempomatu, viz physics.cruiseBase+cruiseBonusMax)
+        speedContrastBoost: 0.05,  // přídavek ke kontrastu při plné rychlosti
+        speedAberrationPx: 1.0,    // přídavek k CA na okraji obrazu (px) při plné rychlosti
+    },
 };
 
 export const IS_MOBILE =
