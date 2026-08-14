@@ -23,7 +23,7 @@ export const BIOMES = [
     {
         name: 'NOC', emoji: '🌙',
         sky: [0x101f3a, 0x24406a, 0x4a6a90], fog: 0x24344e, fogNear: 100, fogFar: 400,
-        sun: 0xa8c4f0, sunInt: 1.4, sunPos: [40, 28, -60], hemi: [0x4a6088, 0x2e4048],
+        sun: 0xa8c4f0, sunInt: 1.4, sunPos: [40, 21, -60], hemi: [0x4a6088, 0x2e4048],
         ridge: [0x36486a, 0x2a3a58, 0x1e2c46],
         sea: [0x0e2844, 0x2a5878], land: 0x40604a, cliff: 0x585264,
     },
