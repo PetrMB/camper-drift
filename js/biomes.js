@@ -9,7 +9,7 @@ export const BIOMES = [
     {
         name: 'POLEDNE', emoji: '☀️',
         sky: [0x3fa8f0, 0x9fd8ff, 0xfff3d0], fog: 0xdff0ff, fogNear: 170, fogFar: 560,
-        sun: 0xfff1cf, sunInt: 3.0, sunPos: [30, 25, -50], hemi: [0xbfe8ff, 0x88a878],
+        sun: 0xfff1cf, sunInt: 3.0, sunPos: [30, 10, -50], hemi: [0xbfe8ff, 0x88a878],
         ridge: [0x8fc4e0, 0x6aa8cc, 0x4d88ae],
         sea: [0x1470a8, 0x4fc0d8], land: 0x9dbb6a, cliff: 0xb09a80,
     },
