@@ -143,6 +143,25 @@ export const CONFIG = {
         slowmoTime: 0.4,
     },
 
+    sea: {
+        ampBoostNear: 0.4,        // max. násobek amplitudy vln blízko kamery
+        ampBoostDist: 140,        // m — do jaké vzdálenosti boost dozní
+        sunShininessNarrow: 200,  // úzký spekulární lalok (jádro sluneční stopy)
+        sunShininessWide: 22,     // širší měkký glow kolem stopy
+        sunWideMix: 0.3,          // váha širšího glow vůči úzkému laloku
+        sunGlintStrength: 2.4,    // celková síla odlesku
+        sunGlintNight: 0.2,       // ztlumení v noci (měsíční stříbrná stopa)
+        specFadeNear: 55,         // m — odlesk dozní k nule mezi near/far (potlačí aliasing periodických vln u obzoru)
+        specFadeFar: 190,
+        glitterAmp: 0.028,        // síla mikro-třpytu — láme lalok na jiskřičky (jemně, ať nealiasuje v dálce)
+        foamThreshold: 1.55,      // práh výška+strmost -> zpěněný hřeben
+        foamSoftness: 0.4,        // šířka přechodu prahu (smoothstep)
+        foamSteepWeight: 1.6,     // váha strmosti vlny v prahu pěny
+        foamIntensity: 0.75,      // krytí bílou barvou v hřebeni
+        shoreDist: 100,           // m od kamery — dosah mělčinového tyrkysu
+        shoreStrength: 0.5,       // síla mělčinového přísvitu blízko pobřeží/kamery
+    },
+
     dayLength: 2000,          // m na denní dobu
     dayBlend: 260,            // m přechodové pásmo
 
