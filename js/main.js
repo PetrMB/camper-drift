@@ -156,6 +156,23 @@ class Game {
         window.addEventListener('pointerup', drop);
         window.addEventListener('pointercancel', drop);
 
+        // mobilní drift tlačítko — drž = smyk (vedle dotykové zóny uprostřed obrazovky)
+        this._btnDrift = false;
+        const driftBtn = document.getElementById('btn-drift');
+        const btnDown = e => {
+            e.preventDefault(); e.stopPropagation();
+            this.audio.unlock();
+            if (start()) return;
+            this._btnDrift = true;
+            driftBtn.classList.add('held');
+            if (driftBtn.setPointerCapture && e.pointerId !== undefined) driftBtn.setPointerCapture(e.pointerId);
+        };
+        const btnUp = () => { this._btnDrift = false; driftBtn.classList.remove('held'); };
+        driftBtn.addEventListener('pointerdown', btnDown);
+        driftBtn.addEventListener('pointerup', btnUp);
+        driftBtn.addEventListener('pointercancel', btnUp);
+        driftBtn.addEventListener('contextmenu', e => e.preventDefault());
+
         const mute = document.getElementById('btn-mute');
         mute.textContent = this.audio.muted ? '🔇' : '🔊';
         mute.addEventListener('pointerdown', e => {
@@ -315,7 +332,7 @@ class Game {
         const van = this.van;
         const keySteer = (this._keys.left ? 1 : 0) - (this._keys.right ? 1 : 0);
         const steer = clamp(keySteer + this._touchSteer, -1, 1);
-        const drift = (this.input.drift || this._touchDrift) && this.state === 'run';
+        const drift = (this.input.drift || this._touchDrift || this._btnDrift) && this.state === 'run';
         van.update(dt, { drift, steer: this.state === 'run' ? steer : 0 }, this.road);
         stepPhysics(dt, (a, b) => this._contact(a, b));
         this.road.ensure(van.s);

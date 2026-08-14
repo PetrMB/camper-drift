@@ -68,6 +68,27 @@ html, body {
     border: none; border-radius: 8px; font-size: 18px; padding: 4px 10px; cursor: pointer;
 }
 
+/* ---------- mobilní drift tlačítko ---------- */
+#btn-drift {
+    display: none;
+    position: fixed; right: 18px; bottom: calc(86px + env(safe-area-inset-bottom));
+    z-index: 15; pointer-events: auto;
+    width: 92px; height: 92px; border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    background: rgba(20, 24, 34, 0.42);
+    color: var(--cream); font-family: inherit; font-weight: 800; font-size: 15px;
+    letter-spacing: 0.08em;
+    -webkit-user-select: none; user-select: none; touch-action: none;
+}
+#btn-drift.held {
+    background: rgba(217, 69, 95, 0.55);
+    border-color: rgba(255, 255, 255, 0.7);
+    transform: scale(0.94);
+}
+@media (pointer: coarse) {
+    #btn-drift { display: block; }
+}
+
 /* ---------- kemp banner ---------- */
 #camp-banner {
     position: fixed; bottom: calc(24px + env(safe-area-inset-bottom)); left: 50%;
