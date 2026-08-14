@@ -151,14 +151,19 @@ export const CONFIG = {
         sunSizeHigh: 12,       // poloměr vysoko na obloze (v poledne)
         sunGlowLow: 100,       // poloměr měkkého glow sprite (nízko)
         sunGlowHigh: 40,       // poloměr glow sprite (vysoko)
+        sunCoreBoostLow: 1.1,  // multiplikátor jasu jádra nízko nad obzorem (drží sytě oranžovou, nevybledá do bíla)
+        sunCoreBoostHigh: 1.6, // multiplikátor jasu jádra vysoko na obloze (menší bílé slunce může být jasnější)
         sunHeightMin: 0.22,    // rozsah normalizované výšky slunce (sunDir.y) pro škálování
-        sunHeightMax: 0.82,
+        sunHeightMax: 0.58,
         moonSize: 13,
         moonGlowSize: 46,
         starRadius: 430,       // poloměr kopule s hvězdami
         flareOffsets: [0.3, 0.56, 0.86],   // pozice na ose slunce->střed obrazu (0=u slunce, 1=u středu)
         flareSizes: [11, 20, 8],
-        flareOpac: [0.22, 0.16, 0.11],
+        flareOpac: [0.6, 0.45, 0.3],       // výrazně čitelnější na teplé obloze (studenější barva, viz Sky)
+        flareColor: 0xdcecff,   // studený kontrastní tón (odlišný od teplé oblohy)
+        streakSize: [130, 3.2], // [délka, výška] horizontálního "anamorfního" streak prvku (m)
+        streakOpac: 0.4,
     },
 };
 

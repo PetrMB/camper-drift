@@ -112,17 +112,27 @@ export class Sky {
         scene.add(this.moonGlow);
         scene.add(this.moonCore);
 
-        // lens flare — pár jemných sprite prvků na ose slunce->střed obrazu, additivní, bez depth testu
+        // lens flare — sprite prvky na ose slunce->střed obrazu, additivní, bez depth testu.
+        // Studenější/kontrastnější barva než teplá obloha, ať je efekt čitelný i za západu.
         const SK = CONFIG.sky;
         this.flares = SK.flareOffsets.map(() => {
             const spr = new THREE.Sprite(new THREE.SpriteMaterial({
-                map: glowTexture(), color: 0xffd9a0, fog: false, depthTest: false, depthWrite: false,
+                map: glowTexture(), color: SK.flareColor, fog: false, depthTest: false, depthWrite: false,
                 transparent: true, blending: THREE.AdditiveBlending, opacity: 0,
             }));
             spr.renderOrder = 20;
             scene.add(spr);
             return spr;
         });
+        // horizontální anamorfní "streak" přes sluneční kotouč — čitelný NFS-style prvek.
+        // Sedí přímo na pozici slunce (ne blízko kamery jako flare řetěz), proto depthTest necháváme
+        // zapnutý — schová se stejně jako kotouč, když je slunce za terénem/hřebeny.
+        this.streak = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: glowTexture(), color: SK.flareColor, fog: false, depthWrite: false,
+            transparent: true, blending: THREE.AdditiveBlending, opacity: 0,
+        }));
+        this.streak.renderOrder = 20;
+        scene.add(this.streak);
 
         // hvězdy — Points na kopuli oblohy, jemné blikání (per-vertex twinkle v shaderu)
         const starCount = quality?.stars ?? 500;
@@ -203,9 +213,12 @@ export class Sky {
         const glowSize = lerp(SK.sunGlowLow, SK.sunGlowHigh, heightN);
         lerpColor(this.sunColor, a.sun, b.sun, t);
 
+        // boost jádra škáluje s výškou slunce — nízko (západ) zůstává sytě oranžové, jen
+        // vysoko na obloze (poledne) je jádro jasnější/bělejší, aby se po tonemappingu nevypralo do bíla
+        const coreBoost = lerp(SK.sunCoreBoostLow, SK.sunCoreBoostHigh, heightN);
         this.sunCore.position.copy(this._sunWorld);
         this.sunCore.scale.setScalar(coreSize);
-        this.sunCore.material.color.copy(this.sunColor).multiplyScalar(1.6);
+        this.sunCore.material.color.copy(this.sunColor).multiplyScalar(coreBoost);
         this.sunCore.material.opacity = sunVis;
         this.sunGlow.position.copy(this._sunWorld);
         this.sunGlow.scale.setScalar(glowSize);
@@ -242,6 +255,15 @@ export class Sky {
             spr.position.copy(camPos).addScaledVector(this._dir, 6 + ft * 10);
             spr.scale.setScalar(SK.flareSizes[i]);
             spr.material.opacity = SK.flareOpac[i] * flareStrength;
+        }
+
+        // horizontální streak přímo přes sluneční kotouč (anamorfní highlight)
+        if (flareStrength <= 0.001) {
+            this.streak.material.opacity = 0;
+        } else {
+            this.streak.position.copy(this._sunWorld);
+            this.streak.scale.set(SK.streakSize[0] * (0.7 + 0.3 * flareStrength), SK.streakSize[1], 1);
+            this.streak.material.opacity = SK.streakOpac * flareStrength;
         }
     }
 }
