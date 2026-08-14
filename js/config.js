@@ -121,10 +121,10 @@ export const CONFIG = {
     },
 
     cam: {
-        dist: 8.6,
-        height: 3.5,
-        lookAhead: 11,
-        lookUp: 1.2,
+        dist: 9.6,
+        height: 5.0,          // výš než střecha vozu — vidět přes něj na překážky
+        lookAhead: 22,        // pohled dál dopředu = víc silnice v záběru
+        lookUp: 0.9,
         spring: 4.6,
         ySpring: 5.5,
         fovBase: 62,
