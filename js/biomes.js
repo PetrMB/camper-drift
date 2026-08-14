@@ -73,6 +73,8 @@ export class Sea {
             uSpecWide: { value: S.sunShininessWide },
             uWideMix: { value: S.sunWideMix },
             uGlitterAmp: { value: S.glitterAmp },
+            uGlitterFadeNear: { value: S.glitterFadeNear },
+            uGlitterFadeFar: { value: S.glitterFadeFar },
             uFoamThreshold: { value: S.foamThreshold },
             uFoamSoftness: { value: S.foamSoftness },
             uFoamSteepW: { value: S.foamSteepWeight },
@@ -137,6 +139,7 @@ export class Sea {
                 uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar;
                 uniform vec3 uSunDir; uniform vec3 uSunColor; uniform float uSunGlint;
                 uniform float uSpecNarrow; uniform float uSpecWide; uniform float uWideMix; uniform float uGlitterAmp;
+                uniform float uGlitterFadeNear; uniform float uGlitterFadeFar;
                 uniform float uFoamThreshold; uniform float uFoamSoftness; uniform float uFoamSteepW; uniform float uFoamIntensity;
                 uniform float uShoreDist; uniform float uShoreStrength;
                 uniform float uSpecFadeNear; uniform float uSpecFadeFar;
@@ -150,11 +153,22 @@ export class Sea {
                     float shoreT = (1.0 - smoothstep(0.0, uShoreDist, vDist)) * uShoreStrength;
                     c = mix(c, shallow, shoreT);
 
-                    // mikro-třpyt navrch na analytickou normálu vlny — láme spekulární lalok na jiskřičky
+                    // po konci mělčinového přechodu (uShoreDist) plynule dotáhni barvu k mlžné barvě
+                    // ještě PŘED skutečným fogNear — jinak v pásmu shoreDist..fogNear (typicky při
+                    // západu, kde je fogNear až 130 m) prosvítá syrová hlubinová barva (indigový flek)
+                    float preFogEdge = max(uFogNear, uShoreDist + 1.0);
+                    float preFog = smoothstep(uShoreDist, preFogEdge, vDist) * 0.65;
+                    c = mix(c, uFogColor, preFog);
+
+                    // mikro-třpyt navrch na analytickou normálu vlny — láme spekulární lalok na jiskřičky.
+                    // Nízká frekvence (byla 1.7/2.4 — příliš vysoká pro fragment-space sin() vzorkovaný
+                    // po pixelech, aliasovala do plošné šachovnice) + útlum s rostoucí vzdáleností od
+                    // kamery, ať třpyt zůstane jen blízkým jiskřičkám a nezaplaví celou hladinu mřížkou.
                     vec3 N = normalize(vNormalW);
-                    float g1 = sin(vWorldPos.x * 1.7 + vWorldPos.z * 1.3 + uTime * 1.9);
-                    float g2 = sin(vWorldPos.x * 2.4 - vWorldPos.z * 2.1 + uTime * 2.7);
-                    N = normalize(N + vec3(g1, 0.0, g2) * uGlitterAmp);
+                    float glitFade = 1.0 - smoothstep(uGlitterFadeNear, uGlitterFadeFar, vDist);
+                    float g1 = sin(vWorldPos.x * 0.35 + vWorldPos.z * 0.27 + uTime * 1.9);
+                    float g2 = sin(vWorldPos.x * 0.5 - vWorldPos.z * 0.44 + uTime * 2.7);
+                    N = normalize(N + vec3(g1, 0.0, g2) * uGlitterAmp * glitFade);
 
                     // sluneční glitter / odlesková stopa (Blinn-Phong přes half-vector)
                     vec3 V = normalize(cameraPosition - vWorldPos);
@@ -168,8 +182,12 @@ export class Sea {
                     // odlesk dozní se vzdáleností — periodická vlnová normála by jinak u obzoru aliasovala
                     // (moc cyklů na málo pixelů), navíc to fyzikálně sedí: třpyt je nejsilnější blízko diváka
                     float specFade = 1.0 - smoothstep(uSpecFadeNear, uSpecFadeFar, vDist);
-                    float sunSpec = (narrow + wide) * (0.82 + 0.18 * fres) * uSunGlint * specFade;
+                    float sunSpec = (narrow + wide) * (0.75 + 0.35 * fres) * uSunGlint * specFade;
                     c += uSunColor * sunSpec;
+                    // clamp před foam/fog mixem — bez toho se widelalok při nízkém slunci (západ) přes
+                    // velkou plochu vody sečte do ploché přepálené bílé/oranžové "podlahy" (floodlight)
+                    // místo definované třpytivé dráhy; clamp nechá jádro jasné, ale ořízne plošné přesvícení
+                    c = clamp(c, 0.0, 1.15);
 
                     // zpěněné hřebeny — práh na výšce + strmosti vlny (jemný smoothstep)
                     float foamRaw = vH + vSteep * uFoamSteepW;
