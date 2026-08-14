@@ -148,7 +148,9 @@ export const CONFIG = {
         ampBoostDist: 140,        // m — do jaké vzdálenosti boost dozní
         sunShininessNarrow: 90,   // úzký spekulární lalok (jádro sluneční stopy) — sníženo z 200, dřív přes pow() zesiloval per-pixel aliasing třpytu do šachovnice
         sunShininessWide: 7,      // širší měkký glow kolem stopy — dál rozšířeno (nižší exponent), ať je třpyt vidět z víc úhlů/kamerových natočení i v poledne
+        sunShininessWideNight: 30, // v noci mnohem užší lalok — široký na řídké síti dělá ostré ploché skvrny
         sunWideMix: 0.3,          // váha širšího glow vůči úzkému laloku — s clampem barvy (viz shader) může zůstat vyšší, aniž by při západu zaplavil hladinu
+        sunWideMixNightScale: 0.4, // ztlumení wide laloku v noci
         sunGlintStrength: 1.3,    // celková síla odlesku — sníženo z 2.4, s clampem barvy (viz shader) dává úzkou zářivou dráhu místo floodlightu
         sunGlintNight: 0.2,       // ztlumení v noci (měsíční stříbrná stopa)
         specFadeNear: 55,         // m — odlesk dozní k nule mezi near/far (potlačí aliasing periodických vln u obzoru)

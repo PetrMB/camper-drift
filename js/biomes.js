@@ -226,6 +226,12 @@ export class Sea {
         const glintOf = biome => biome.name === 'NOC' ? CONFIG.sea.sunGlintNight : 1.0;
         const nightK = lerp(glintOf(a), glintOf(b), mt);
         this.uniforms.uSunGlint.value = CONFIG.sea.sunGlintStrength * nightK;
+        // široký lalok je v noci nutné zúžit a ztlumit — na řídké síti moře jinak
+        // per-vertex interpolace normály slévá odlesk do plochých ostře ohraničených skvrn
+        const S = CONFIG.sea;
+        const dayT = clamp((nightK - S.sunGlintNight) / (1 - S.sunGlintNight), 0, 1);
+        this.uniforms.uSpecWide.value = lerp(S.sunShininessWideNight, S.sunShininessWide, dayT);
+        this.uniforms.uWideMix.value = S.sunWideMix * lerp(S.sunWideMixNightScale, 1, dayT);
     }
 }
 
