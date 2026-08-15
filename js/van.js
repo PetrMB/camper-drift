@@ -67,38 +67,55 @@ export function buildHymercar() {
     const plateM = mat(0xf2f2ea, { rough: 0.5 });
 
     // --- hlavní hull (krémová karoserie, kabina + obytná skříň) ---
-    g.add(box(2.05, 1.04, 4.35, cream, 0, 1.10, -0.15));            // hlavní trup
+    // hull KONČÍ u paty čelního skla (z=1.85) — kapota+sklo dál vyplňují příď, takže hullova
+    // plná výška (1.62, rovna krémovému pásu pod klínem) se nikde neplete kapotě/sklu do cesty
+    g.add(box(2.05, 1.04, 4.175, cream, 0, 1.10, -0.2375));         // hlavní trup
     g.add(box(2.07, 0.1, 4.35, creamDark, 0, 0.60, -0.15));         // spodní práh (přesahuje pod hull — žádná koplanární hrana)
 
     // --- kapota (krátký, plochý nos Fiat Ducato — jen mírné sešikmení) ---
-    g.add(slantRoof(1.95, 0.46, 0.5, cream, 0, 1.15, 2.15, { dropFront: 0.08 }));
+    // hrana kapoty u nosu ~0.48*H (~1.2 m dle reference), u paty skla o trochu výš (~1.38)
+    g.add(slantRoof(1.95, 0.46, 0.55, cream, 0, 1.15, 2.125, { dropFront: 0.16 }));
 
-    // --- čelní sklo (skloněné) + A-sloupky ---
-    const ws = box(1.86, 0.82, 0.06, glass, 0, 1.68, 1.66);
-    ws.rotation.x = -0.32;
+    // --- čelní sklo (skloněné, TMAVÉ) + A-sloupky ---
+    // sklo je hlavní stoupající plocha profilu: od paty kapoty (z=1.85, h~1.38) až k A-sloupku
+    // (z=1.55, ~20 % délky vozu, h~1.8 = ~0.72*H dle reference) — bílý klín začíná AŽ NAD ním.
+    // ŠÍŘKA 2.08 (> hull 2.05, stejný trik jako u bočních oken) — jinak leží celé sklo O 0.1 m
+    // BLÍŽ ose vozu než hullova vnější stěna a ta ho z boku úplně zakryje (tichý z-buffer bug,
+    // stejná chyba se skrývala i v předchozí "správné" verzi 55c5036 — proto tam bylo sklo neviditelné).
+    const ws = box(2.08, 0.52, 0.06, glass, 0, 1.59, 1.70);
+    ws.rotation.x = -0.62;
     g.add(ws);
-    g.add(box(0.12, 0.6, 0.3, cream, -0.95, 1.72, 1.75));  // A-sloupky, sahají až k patě střešního náběhu
-    g.add(box(0.12, 0.6, 0.3, cream, 0.95, 1.72, 1.75));
-    g.add(box(1.8, 0.07, 0.16, black, 0, 1.33, 1.86));     // clona pod sklem — ostřeji odliší kapotu od kabiny
+    // A-sloupky ze stejného důvodu širší/víc navenek než hullova stěna (x=±1.025)
+    g.add(box(0.16, 0.5, 0.25, cream, -0.97, 1.6, 1.55));  // A-sloupky, sahají až k patě střešního klínu
+    g.add(box(0.16, 0.5, 0.25, cream, 0.97, 1.6, 1.55));
+    g.add(box(1.8, 0.07, 0.16, black, 0, 1.35, 1.85));     // clona pod sklem — ostřeji odliší kapotu od kabiny
 
     // --- STŘECHA — jedna souvislá "high-top" hmota (žádná druhá bublina nad kabinou) ---
-    // 1) náběh hned za čelním sklem — KRÁTKÝ a strmý (skoro srázný), ne pozvolná rampa:
-    //    nízko u A-sloupků (~2.02) -> plná výška (2.66) během ~0.35 m
-    g.add(slantRoof(2.08, 1.06, 0.35, white, 0, 2.13, 1.575, { dropFront: 0.64, bevel: 0.18 }));
+    // POZOR na slantRoof + bevel: bevel!=0 přidává NEDOTČENÝ středový řádek vrcholů přesně na
+    // výšce středu boxu (heightSegments=2). Je-li dropFront/dropBack větší než polovina výšky
+    // boxu, horní hrana klesne POD tento středový řádek -> strana se "přehne" a viditelné
+    // maximum se přilepí na výšku středu boxu místo skutečně sešikmené hrany. Segmenty 1 a 3
+    // proto mají bevel:0 (ostrá boční hrana, ale bez tohoto artefaktu) a jsou zvlášť vysoké,
+    // aby se dropFront/dropBack vešel bez převrácení horní/dolní hrany.
+    // 1) náběh hned za čelním sklem — POZVOLNÁ rampa přes ~0.95 m (reference: plná výška se
+    //    dosáhne až ve ~38 % délky vozu, ne hned za sklem) — spodek klínu NASEDÁ na krémový pás
+    //    (bottom=1.62=výška hullu, žádná mezera/přesah) a začíná AŽ NA výšce A-sloupků (1.8=0.72*H)
+    g.add(slantRoof(2.08, 0.95, 0.95, white, 0, 2.095, 1.075, { dropFront: 0.77 }));
     // 2) hlavní plochá klenba — svislé boky, zaoblená jen horní hrana (fasetovaně), NE půlkruh
-    g.add(slantRoof(2.08, 1.06, 3.2, white, 0, 2.13, -0.2, { bevel: 0.18 }));
-    // 3) mírné zúžení těsně před zadní stěnou
-    g.add(slantRoof(2.08, 1.06, 0.5, white, 0, 2.13, -2.05, { dropBack: 0.28, bevel: 0.18 }));
-    // lišta na švu klenba/hull (schová spáru, dá to hranu)
-    g.add(box(2.1, 0.05, 4.35, creamDark, 0, 1.625, -0.15));
-    // zvýšené okénko přesně na náběhu (charakteristický detail Hymeru)
-    g.add(box(0.4, 0.32, 0.04, glass, 0, 1.9, 1.62));
-    // ventilace na střeše
-    g.add(box(0.4, 0.06, 0.3, grey, 0.1, 2.6, 1.55));               // poklop nad kabinou (na náběhu)
+    g.add(slantRoof(2.08, 1.06, 2.85, white, 0, 2.13, -0.825, { bevel: 0.18 }));
+    // 3) zúžení k zádi ve dvou krocích (reference: křivka je konvexní — skoro plná výška
+    //    dlouho, prudký pád až těsně u zadní hrany) — 3a mírný pokles, 3b krátký a strmý
+    g.add(slantRoof(2.08, 1.06, 0.31, white, 0, 2.13, -2.105, { dropBack: 0.24, bevel: 0.18 }));
+    g.add(slantRoof(2.08, 1.8, 0.23, white, 0, 1.43, -2.375, { dropBack: 1.03 }));
+    // lišta na švu klenba/hull (schová spáru, dá to hranu) — délka navazuje na hull
+    g.add(box(2.1, 0.05, 4.175, creamDark, 0, 1.625, -0.2375));
+    // (zvýšené okénko na náběhu vynecháno — na kratším/nižším klínu by kolidovalo s A-sloupkem)
+    // ventilace na ploché klenbě (jasně za náběhem, ne na jeho švu)
+    g.add(box(0.4, 0.05, 0.3, grey, 0.1, 2.6, 0.2));                // poklop nad kabinou
     g.add(box(0.5, 0.07, 0.35, grey, 0.1, 2.66, -0.4));             // vent na hlavní klenbě
-    // střešní ližiny (rack) při zadní části klenby
-    g.add(box(0.05, 0.05, 1.5, grey, -0.72, 2.7, -1.05));
-    g.add(box(0.05, 0.05, 1.5, grey, 0.72, 2.7, -1.05));
+    // střešní ližiny (rack) posazené přímo na klenbu (bar půltloušťka 0.025, střecha 2.57 -> bez mezery)
+    g.add(box(0.05, 0.05, 1.5, grey, -0.72, 2.595, -1.05));
+    g.add(box(0.05, 0.05, 1.5, grey, 0.72, 2.595, -1.05));
 
     // --- boční okna ---
     g.add(box(2.08, 0.4, 0.8, glass, 0, 1.38, 1.1));                // přední boční (kabina)
@@ -130,18 +147,18 @@ export function buildHymercar() {
     g.add(box(0.06, 0.2, 0.16, black, -1.09, 1.62, 1.55));
     g.add(box(0.06, 0.2, 0.16, black, 1.09, 1.62, 1.55));
 
-    // --- kola ---
-    const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.26, 10);
-    const hubGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.28, 8);
+    // --- kola --- (poloměr/rozchod dle reference: poloměr ~0.066*L, rozchod ~0.76*W)
+    const wheelGeo = new THREE.CylinderGeometry(0.33, 0.33, 0.26, 10);
+    const hubGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.26, 8);
     const wheels = [];
-    const wPos = [[-0.92, 1.55], [0.92, 1.55], [-0.92, -1.45], [0.92, -1.45]];
+    const wPos = [[-0.85, 1.55], [0.85, 1.55], [-0.85, -1.45], [0.85, -1.45]];
     for (let i = 0; i < 4; i++) {
         const grp = new THREE.Group();
         const t = new THREE.Mesh(wheelGeo, tyreM); t.rotation.z = Math.PI / 2; t.castShadow = true;
         const h = new THREE.Mesh(hubGeo, hubM); h.rotation.z = Math.PI / 2;
         const spin = new THREE.Group(); spin.add(t); spin.add(h);
         grp.add(spin);
-        grp.position.set(wPos[i][0], 0.36, wPos[i][1]);
+        grp.position.set(wPos[i][0], 0.33, wPos[i][1]);
         grp.userData.spin = spin;
         grp.userData.front = i < 2;
         g.add(grp);
@@ -430,7 +447,7 @@ export class Van {
         const yaw = this.yaw, p = this.pos;
         const sinY = Math.sin(yaw), cosY = Math.cos(yaw);
         const bx = -sinY * 1.45, bz = -cosY * 1.45;
-        out0.set(p.x + bx + cosY * 0.92, this.visY + 0.06, p.z + bz - sinY * 0.92);
-        out1.set(p.x + bx - cosY * 0.92, this.visY + 0.06, p.z + bz + sinY * 0.92);
+        out0.set(p.x + bx + cosY * 0.85, this.visY + 0.06, p.z + bz - sinY * 0.85);
+        out1.set(p.x + bx - cosY * 0.85, this.visY + 0.06, p.z + bz + sinY * 0.85);
     }
 }
