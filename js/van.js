@@ -18,13 +18,30 @@ function box(w, h, d, m, x, y, z) {
     g.castShadow = true;
     return g;
 }
-/** box se sešikmenou horní-přední hranou (kapota) — posune vrcholy na hraně y=+h/2,z=+d/2 dolů o `drop` */
-function wedgeFront(w, h, d, drop, m, x, y, z) {
-    const geo = new THREE.BoxGeometry(w, h, d);
+/**
+ * box s volitelně sešikmenou přední/zadní horní hranou (dropFront/dropBack táhne
+ * hranu y=+h/2 na z=+-d/2 dolů) a volitelně zaoblenýma levou/pravou horní hranou
+ * (bevel táhne hrany x=+-w/2,y=+h/2 dovnitř a dolů) — nízkopoly náhrada za hladkou
+ * "half-pipe" klenbu: dá plochý, faset­ovaný "high-top" profil karavanové střechy.
+ */
+function slantRoof(w, h, d, m, x, y, z, { dropFront = 0, dropBack = 0, bevel = 0 } = {}) {
+    // heightSegments=2 (přidá řádek vrcholů v y=0) drží boky svislé a zaoblí/sešikmí
+    // jen HORNÍ hranu — jinak by se bevel/drop natáhl přes celou výšku boxu (komolý jehlan)
+    const geo = new THREE.BoxGeometry(w, h, d, 1, bevel ? 2 : 1, 1);
     const pos = geo.attributes.position;
-    const hh = h / 2, hd = d / 2;
+    const hh = h / 2, hw = w / 2, hd = d / 2;
     for (let i = 0; i < pos.count; i++) {
-        if (Math.abs(pos.getY(i) - hh) < 1e-4 && Math.abs(pos.getZ(i) - hd) < 1e-4) pos.setY(i, hh - drop);
+        if (Math.abs(pos.getY(i) - hh) < 1e-4) {
+            let ny = hh;
+            if (dropFront && Math.abs(pos.getZ(i) - hd) < 1e-4) ny -= dropFront;
+            if (dropBack && Math.abs(pos.getZ(i) + hd) < 1e-4) ny -= dropBack;
+            if (bevel) {
+                const sx = Math.sign(pos.getX(i)) || 1;
+                pos.setX(i, sx * (hw - bevel));
+                ny -= bevel * 0.5;
+            }
+            pos.setY(i, ny);
+        }
     }
     pos.needsUpdate = true;
     geo.computeVertexNormals();
@@ -33,75 +50,73 @@ function wedgeFront(w, h, d, drop, m, x, y, z) {
     g.castShadow = true;
     return g;
 }
-/** zaoblená "půltrubka" (klenutá střecha/alkovna) — plochá spodní hrana na y, klenba nahoru, ploché čelní/zadní víčko */
-function dome(radius, length, m, y, z, segs = 8) {
-    const geo = new THREE.CylinderGeometry(radius, radius, length, segs, 1, false, -Math.PI / 2, Math.PI);
-    geo.rotateX(-Math.PI / 2); // osa válce (délka) -> vozidlová osa Z; půlkruh (0..r) -> vozidlová výška Y
-    const g = new THREE.Mesh(geo, m);
-    g.position.set(0, y, z);
-    g.castShadow = true;
-    return g;
-}
 
 export function buildHymercar() {
     const g = new THREE.Group();
-    const cream = mat(0xe8e1cf, { rough: 0.35 });          // krémová karoserie (lak)
-    const creamDark = mat(0xd7cdb6, { rough: 0.4 });        // spodní práh / lišty
-    const white = mat(0xf5f4ef, { rough: 0.42, flat: true }); // vysoká klenutá střecha + alkovna
-    const glass = mat(0x171b21, { rough: 0.15, metal: 0.55, flat: true });
-    const brown = mat(0x6b4830, { rough: 0.5 });            // hnědý pruh
-    const orange = mat(0xc96a34, { rough: 0.5 });           // oranžový pruh
-    const black = mat(0x1c1c1f, { rough: 0.65 });
-    const grey = mat(0x7d7d82, { rough: 0.5, metal: 0.2 }); // nárazníky/lišty
+    const cream = mat(0xe4dcc4, { rough: 0.35 });           // krémová karoserie (lak)
+    const creamDark = mat(0xcfc4a4, { rough: 0.4 });        // spodní práh / lišty
+    const white = mat(0xf1f0ea, { rough: 0.4, flat: true }); // vysoký "high-top" střešní nástavec
+    const glass = mat(0x14181f, { rough: 0.15, metal: 0.55, flat: true });
+    const black = mat(0x1a1a1d, { rough: 0.65 });
+    const grey = mat(0x7d7d82, { rough: 0.5, metal: 0.2 }); // nárazníky/lišty/rack
     const hubM = mat(0xc9c9c2, { rough: 0.35, metal: 0.4, flat: true });
     const tyreM = mat(0x17171a, { rough: 0.9, flat: true });
     const headM = mat(0xfff2c0, { extra: { emissive: 0xffe6a0, emissiveIntensity: 0.9 } });
     const tailM = mat(0xa02a22, { extra: { emissive: 0x7a1810, emissiveIntensity: 0.75 } });
+    const amberM = mat(0xd98a2b, { extra: { emissive: 0xa85e10, emissiveIntensity: 0.5 } });
     const plateM = mat(0xf2f2ea, { rough: 0.5 });
 
-    // --- hlavní hull (krémová karoserie) ---
-    g.add(box(2.05, 1.0, 4.35, cream, 0, 1.08, -0.15));             // hlavní trup (obytná skříň + kabina)
+    // --- hlavní hull (krémová karoserie, kabina + obytná skříň) ---
+    g.add(box(2.05, 1.04, 4.35, cream, 0, 1.10, -0.15));            // hlavní trup
     g.add(box(2.07, 0.1, 4.35, creamDark, 0, 0.60, -0.15));         // spodní práh (přesahuje pod hull — žádná koplanární hrana)
 
-    // --- kapota (krátký nos, sešikmená hrana) ---
-    g.add(wedgeFront(1.95, 0.5, 0.5, 0.15, cream, 0, 1.15, 2.15));
+    // --- kapota (krátký, plochý nos Fiat Ducato — jen mírné sešikmení) ---
+    g.add(slantRoof(1.95, 0.46, 0.5, cream, 0, 1.15, 2.15, { dropFront: 0.08 }));
 
     // --- čelní sklo (skloněné) + A-sloupky ---
-    const ws = box(1.86, 0.85, 0.06, glass, 0, 1.7, 1.66);
-    ws.rotation.x = -0.34;
+    const ws = box(1.86, 0.82, 0.06, glass, 0, 1.68, 1.66);
+    ws.rotation.x = -0.32;
     g.add(ws);
-    g.add(box(0.12, 0.62, 0.3, cream, -0.95, 1.75, 1.75)); // A-sloupky před hranou bočního okna
-    g.add(box(0.12, 0.62, 0.3, cream, 0.95, 1.75, 1.75));
+    g.add(box(0.12, 0.6, 0.3, cream, -0.95, 1.72, 1.75));  // A-sloupky, sahají až k patě střešního náběhu
+    g.add(box(0.12, 0.6, 0.3, cream, 0.95, 1.72, 1.75));
+    g.add(box(1.8, 0.07, 0.16, black, 0, 1.33, 1.86));     // clona pod sklem — ostřeji odliší kapotu od kabiny
 
-    // --- zaoblená vysoká střecha (hlavní klenba nad obytnou skříní) ---
-    g.add(dome(1.02, 3.5, white, 1.58, -0.55, 8));
-    // --- ALKOVNA — charakteristický přesah nad kabinou, vyšší a kratší klenba ---
-    g.add(dome(1.0, 0.95, white, 1.75, 1.625, 8));
+    // --- STŘECHA — jedna souvislá "high-top" hmota (žádná druhá bublina nad kabinou) ---
+    // 1) náběh hned za čelním sklem — KRÁTKÝ a strmý (skoro srázný), ne pozvolná rampa:
+    //    nízko u A-sloupků (~2.02) -> plná výška (2.66) během ~0.35 m
+    g.add(slantRoof(2.08, 1.06, 0.35, white, 0, 2.13, 1.575, { dropFront: 0.64, bevel: 0.18 }));
+    // 2) hlavní plochá klenba — svislé boky, zaoblená jen horní hrana (fasetovaně), NE půlkruh
+    g.add(slantRoof(2.08, 1.06, 3.2, white, 0, 2.13, -0.2, { bevel: 0.18 }));
+    // 3) mírné zúžení těsně před zadní stěnou
+    g.add(slantRoof(2.08, 1.06, 0.5, white, 0, 2.13, -2.05, { dropBack: 0.28, bevel: 0.18 }));
     // lišta na švu klenba/hull (schová spáru, dá to hranu)
-    g.add(box(2.08, 0.05, 4.35, creamDark, 0, 1.605, -0.15));
+    g.add(box(2.1, 0.05, 4.35, creamDark, 0, 1.625, -0.15));
+    // zvýšené okénko přesně na náběhu (charakteristický detail Hymeru)
+    g.add(box(0.4, 0.32, 0.04, glass, 0, 1.9, 1.62));
     // ventilace na střeše
-    g.add(box(0.5, 0.08, 0.35, grey, 0, 2.69, 1.9));                // vent na hraně alkovny (zapuštěný do klenby)
-    g.add(box(0.55, 0.09, 0.7, grey, 0.15, 2.57, -0.3));            // střešní okno/vent
-    g.add(box(0.4, 0.06, 0.45, black, -0.4, 2.6, -1.3));            // druhý vent
+    g.add(box(0.4, 0.06, 0.3, grey, 0.1, 2.6, 1.55));               // poklop nad kabinou (na náběhu)
+    g.add(box(0.5, 0.07, 0.35, grey, 0.1, 2.66, -0.4));             // vent na hlavní klenbě
+    // střešní ližiny (rack) při zadní části klenby
+    g.add(box(0.05, 0.05, 1.5, grey, -0.72, 2.7, -1.05));
+    g.add(box(0.05, 0.05, 1.5, grey, 0.72, 2.7, -1.05));
 
     // --- boční okna ---
-    g.add(box(2.08, 0.42, 0.85, glass, 0, 1.35, 1.15));             // přední boční (kabina)
-    g.add(box(2.08, 0.4, 1.3, glass, 0, 1.3, -1.1));                // obytné okno
+    g.add(box(2.08, 0.4, 0.8, glass, 0, 1.38, 1.1));                // přední boční (kabina)
+    g.add(box(2.08, 0.38, 1.3, glass, 0, 1.35, -1.05));             // obytné okno
     // zadní okna (naznačují dvoukřídlé dveře)
     g.add(box(0.55, 0.42, 0.04, glass, -0.42, 1.35, -2.33));
     g.add(box(0.55, 0.42, 0.04, glass, 0.42, 1.35, -2.33));
     g.add(box(0.03, 0.9, 0.05, black, 0, 1.15, -2.34));             // spára dveří
 
-    // --- pruhy (hnědý + oranžový) ---
-    g.add(box(2.07, 0.14, 4.3, brown, 0, 1.32, -0.15));
-    g.add(box(2.07, 0.06, 4.3, orange, 0, 1.22, -0.15));
+    // --- pruh (jeden tenký černý pod okny, jako na předloze) ---
+    g.add(box(2.08, 0.07, 4.3, black, 0, 1.24, -0.15));
 
     // --- maska, světla, nárazníky (nos) ---
     g.add(box(1.5, 0.24, 0.06, black, 0, 1.0, 2.42));               // mřížka
     g.add(box(0.32, 0.15, 0.06, headM, -0.72, 1.05, 2.43));         // světlomety (obdélníkové)
     g.add(box(0.32, 0.15, 0.06, headM, 0.72, 1.05, 2.43));
-    g.add(box(0.15, 0.1, 0.05, orange, -0.95, 0.95, 2.43));         // blinkry
-    g.add(box(0.15, 0.1, 0.05, orange, 0.95, 0.95, 2.43));
+    g.add(box(0.15, 0.1, 0.05, amberM, -0.95, 0.95, 2.43));         // blinkry
+    g.add(box(0.15, 0.1, 0.05, amberM, 0.95, 0.95, 2.43));
     g.add(box(2.05, 0.22, 0.18, grey, 0, 0.55, 2.35));              // přední nárazník
     g.add(box(0.46, 0.13, 0.03, plateM, 0, 0.78, 2.44));            // přední SPZ
 
