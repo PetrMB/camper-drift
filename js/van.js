@@ -61,7 +61,7 @@ export function buildHymercar() {
 
     // --- hlavní hull (krémová karoserie) ---
     g.add(box(2.05, 1.0, 4.35, cream, 0, 1.08, -0.15));             // hlavní trup (obytná skříň + kabina)
-    g.add(box(2.07, 0.08, 4.35, creamDark, 0, 0.62, -0.15));        // spodní práh
+    g.add(box(2.07, 0.1, 4.35, creamDark, 0, 0.60, -0.15));         // spodní práh (přesahuje pod hull — žádná koplanární hrana)
 
     // --- kapota (krátký nos, sešikmená hrana) ---
     g.add(wedgeFront(1.95, 0.5, 0.5, 0.15, cream, 0, 1.15, 2.15));
@@ -70,8 +70,8 @@ export function buildHymercar() {
     const ws = box(1.86, 0.85, 0.06, glass, 0, 1.7, 1.66);
     ws.rotation.x = -0.34;
     g.add(ws);
-    g.add(box(0.12, 0.62, 0.5, cream, -0.95, 1.75, 1.55));
-    g.add(box(0.12, 0.62, 0.5, cream, 0.95, 1.75, 1.55));
+    g.add(box(0.12, 0.62, 0.3, cream, -0.95, 1.75, 1.75)); // A-sloupky před hranou bočního okna
+    g.add(box(0.12, 0.62, 0.3, cream, 0.95, 1.75, 1.75));
 
     // --- zaoblená vysoká střecha (hlavní klenba nad obytnou skříní) ---
     g.add(dome(1.02, 3.5, white, 1.58, -0.55, 8));
@@ -80,8 +80,8 @@ export function buildHymercar() {
     // lišta na švu klenba/hull (schová spáru, dá to hranu)
     g.add(box(2.08, 0.05, 4.35, creamDark, 0, 1.605, -0.15));
     // ventilace na střeše
-    g.add(box(0.5, 0.08, 0.35, grey, 0, 2.74, 1.9));                // vent na hraně alkovny
-    g.add(box(0.55, 0.09, 0.7, grey, 0.15, 2.62, -0.3));            // střešní okno/vent
+    g.add(box(0.5, 0.08, 0.35, grey, 0, 2.69, 1.9));                // vent na hraně alkovny (zapuštěný do klenby)
+    g.add(box(0.55, 0.09, 0.7, grey, 0.15, 2.57, -0.3));            // střešní okno/vent
     g.add(box(0.4, 0.06, 0.45, black, -0.4, 2.6, -1.3));            // druhý vent
 
     // --- boční okna ---
