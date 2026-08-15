@@ -15,7 +15,7 @@ export const BIOMES = [
     },
     {
         name: 'ZÁPAD SLUNCE', emoji: '🌅',
-        sky: [0x4b3d78, 0xff7d47, 0xffc17a], fog: 0xf5c093, fogNear: 130, fogFar: 470,
+        sky: [0x4b3d78, 0xff7d47, 0xffc17a], fog: 0xe8b184, fogNear: 165, fogFar: 500,
         sun: 0xff9a4d, sunInt: 2.6, sunPos: [-80, 24, -45], hemi: [0xe8b898, 0x8a7a58],
         ridge: [0xc49a88, 0x9d7468, 0x6e5050],
         sea: [0x2a4878, 0xff9d6f], land: 0x8aa058, cliff: 0xc09878,

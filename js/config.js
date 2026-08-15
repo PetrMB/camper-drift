@@ -154,6 +154,52 @@ export const CONFIG = {
         tireSegments: 360,
         slowmoScale: 0.35,
         slowmoTime: 0.4,
+
+        // --- pocit rychlosti: podélné "wind streak" čárky po stranách/nahoře záběru (NFS-style) ---
+        speedLines: {
+            speedMin: 24,          // m/s — od této rychlosti se čárky začínají objevovat
+            speedMax: 34,          // m/s — plná intenzita (odpovídá vrcholu tempomatu, viz physics.cruiseBase+cruiseBonusMax)
+            rateMin: 22,           // čárek/s při speedMin
+            rateMax: 85,           // čárek/s při speedMax
+            life: 0.3,             // s — životnost jedné čárky
+            // POZOR: oba konce úsečky mají stejný (pevný, metrický) boční/výškový ofset a liší se
+            // jen vzdáleností před kamerou — díky tomu úsečka NEleží podél jednoho zorného paprsku
+            // (což by se v obraze zhroutilo do bodu), ale směřuje od okraje/blízka středu. xMin/xMax
+            // jsou odvozené tak, aby i při nejnižší rychlosti (nejužší FOV, viz cam.fovBase) zůstal
+            // bod na zNear uvnitř zorného pole — jinak se ořízne mimo obraz a je vidět jen útržek.
+            xMin: 5.4, xMax: 7.8,  // m — boční ofset od osy kamery (mimo silnici, viz road.width=9)
+            yMin: 0.8, yMax: 3.8,  // m — výška nad kamerou — drží čárky v horní/boční části záběru
+            zNear: 6.5,            // m — vzdálenost před kamerou při vzniku (dost daleko, aby ofset nebyl mimo FOV)
+            lenMin: 2.0, lenMax: 5.0, // m — délka čárky, roste s rychlostí (motion-blur pocit)
+            opacity: 0.28,
+            color: [0.86, 0.94, 1.0],
+        },
+
+        // --- jiskry: proražení zídky (_smashRail) + kontakt boku vozu se zídkou u moře při driftu ---
+        sparks: {
+            smashCount: 26,
+            smashSpeedMin: 3, smashSpeedMax: 11,
+            smashUpMin: 3, smashUpMax: 12,
+            smashLifeMin: 0.28, smashLifeMax: 0.5,
+
+            wallVanSpeedMin: 14,    // m/s — pod touto rychlostí vozu boční jiskry nevznikají
+            wallMargin: 1.0,        // m — pásmo těsně u zídky (měřeno od railLat směrem do vozovky)
+            wallChance: 0.6,        // pravděpodobnost jisker v jednom fixním kroku (60 Hz), když je vůz v pásmu
+            wallCount: 3,
+            wallSpeedMin: 1.2, wallSpeedMax: 4,
+            wallUpMin: 0.4, wallUpVar: 2.0,
+            wallLifeMin: 0.15, wallLifeMax: 0.3,
+
+            gravity: -16,                  // silná gravitace = rychlý pád jisker
+            hotColor: [3.2, 2.6, 1.1],     // bílo-žlutá, HDR (>1) ať pod bloomem žhne
+            coolColor: [3.0, 1.3, 0.25],   // sytě oranžová, HDR
+        },
+
+        // --- hustší kouř z driftu při velkém skluzu (viz main.js _step) ---
+        smokeDriftHardSlip: 20,   // ° nad slipMinDeg, při kterém drift dosáhne plné hustoty kouře
+        smokeDriftExtraPuffs: 2,  // max. dodatečné obláčky na kolo při plné hustotě (= vizuálně "větší" kouř)
+        smokeNightDim: 0.55,      // násobič R/G kouře v noci (tmavší)
+        smokeNightBlue: 0.14,     // přídavek do B kanálu v noci (modravější)
     },
 
     sea: {
@@ -185,8 +231,8 @@ export const CONFIG = {
     sky: {
         sunSizeLow: 30,        // poloměr slunečního kotouče nízko nad obzorem (m)
         sunSizeHigh: 12,       // poloměr vysoko na obloze (v poledne)
-        sunGlowLow: 100,       // poloměr měkkého glow sprite (nízko)
-        sunGlowHigh: 40,       // poloměr glow sprite (vysoko)
+        sunGlowLow: 62,        // poloměr měkkého glow sprite (nízko) — menší, ať neoslní celý záběr
+        sunGlowHigh: 34,       // poloměr glow sprite (vysoko)
         sunCoreBoostLow: 0.9,  // multiplikátor jasu jádra nízko nad obzorem (< 1 aby jádro nevypálilo bloomem do bíla; jas dodává sunGlow)
         sunCoreBoostHigh: 1.6, // multiplikátor jasu jádra vysoko na obloze (menší bílé slunce může být jasnější)
         sunHeightMin: 0.22,    // rozsah normalizované výšky slunce (sunDir.y) pro škálování
@@ -196,10 +242,10 @@ export const CONFIG = {
         starRadius: 430,       // poloměr kopule s hvězdami
         flareOffsets: [0.3, 0.56, 0.86],   // pozice na ose slunce->střed obrazu (0=u slunce, 1=u středu)
         flareSizes: [11, 20, 8],
-        flareOpac: [0.6, 0.45, 0.3],       // výrazně čitelnější na teplé obloze (studenější barva, viz Sky)
+        flareOpac: [0.38, 0.28, 0.19],     // čitelný, ale nesmí bránit výhledu při jízdě proti slunci
         flareColor: 0xdcecff,   // studený kontrastní tón (odlišný od teplé oblohy)
         streakSize: [130, 3.2], // [délka, výška] horizontálního "anamorfního" streak prvku (m)
-        streakOpac: 0.4,
+        streakOpac: 0.26,
     },
 
     // post-processing — filmový arkádový look (NFS Hot Pursuit): bloom + grading pass
@@ -235,12 +281,14 @@ export const IS_MOBILE =
 
 export const QUALITY = IS_MOBILE
     ? {
-        pixelRatio: 1.5, shadow: 1024, bloomScale: 0.5, antialias: false, smoke: 128, seaSegs: 40, stars: 380,
+        pixelRatio: 1.5, shadow: 1024, bloomScale: 0.5, antialias: false, smoke: 144, seaSegs: 40, stars: 380,
         reflACount: 55, reflBCount: 20, bollardCount: 35, bushCount: 80, boulderCount: 10,
+        speedLines: 26, sparks: 44,
     }
     : {
-        pixelRatio: Math.min(window.devicePixelRatio || 1, 2), shadow: 2048, bloomScale: 1, antialias: true, smoke: 224, seaSegs: 72, stars: 750,
+        pixelRatio: Math.min(window.devicePixelRatio || 1, 2), shadow: 2048, bloomScale: 1, antialias: true, smoke: 260, seaSegs: 72, stars: 750,
         reflACount: 100, reflBCount: 40, bollardCount: 70, bushCount: 160, boulderCount: 20,
+        speedLines: 52, sparks: 90,
     };
 
 export function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
