@@ -1,24 +1,16 @@
 // Hymercar 1987 (Fiat Ducato Mk1) — procedurální low-poly model + arkádový drift controller
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { CONFIG, clamp, lerp, wrapAngle } from './config.js';
 import { createVanBody } from './physics.js';
 
 const P = CONFIG.physics;
 
-// ---------- GLB model vozu (nahrazuje procedurální model po asynchronním načtení) ----------
-const HYMER_GLB_URL = 'assets/hymer.glb';
-// bounds zdrojového GLB: X -2.22..2.21 (délka), Y 0..2.50 (výška, spodek už na 0), Z -0.97..0.97 (šířka)
-const HYMER_GLB_LENGTH = 4.43;
-const HYMER_TARGET_LENGTH = 4.9;
-const HYMER_GLB_SCALE = HYMER_TARGET_LENGTH / HYMER_GLB_LENGTH; // ~1.106
-// rotace kolem Y tak, aby předek (kabina/čelní sklo) mířil do herního +Z (yaw=0); ověřeno vizuálně screenshotem
-const HYMER_GLB_YAW = Math.PI / 2;
-let _hymerGLTFCache = null; // sdílený loader promise, kdyby vzniklo víc instancí Van
-
 // ---------- model ----------
 function mat(color, opts = {}) {
-    return new THREE.MeshStandardMaterial({ color, roughness: opts.rough ?? 0.75, metalness: opts.metal ?? 0.05, ...opts.extra });
+    return new THREE.MeshStandardMaterial({
+        color, roughness: opts.rough ?? 0.75, metalness: opts.metal ?? 0.05,
+        flatShading: !!opts.flat, ...opts.extra,
+    });
 }
 function box(w, h, d, m, x, y, z) {
     const g = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
@@ -26,77 +18,112 @@ function box(w, h, d, m, x, y, z) {
     g.castShadow = true;
     return g;
 }
+/** box se sešikmenou horní-přední hranou (kapota) — posune vrcholy na hraně y=+h/2,z=+d/2 dolů o `drop` */
+function wedgeFront(w, h, d, drop, m, x, y, z) {
+    const geo = new THREE.BoxGeometry(w, h, d);
+    const pos = geo.attributes.position;
+    const hh = h / 2, hd = d / 2;
+    for (let i = 0; i < pos.count; i++) {
+        if (Math.abs(pos.getY(i) - hh) < 1e-4 && Math.abs(pos.getZ(i) - hd) < 1e-4) pos.setY(i, hh - drop);
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+    const g = new THREE.Mesh(geo, m);
+    g.position.set(x, y, z);
+    g.castShadow = true;
+    return g;
+}
+/** zaoblená "půltrubka" (klenutá střecha/alkovna) — plochá spodní hrana na y, klenba nahoru, ploché čelní/zadní víčko */
+function dome(radius, length, m, y, z, segs = 8) {
+    const geo = new THREE.CylinderGeometry(radius, radius, length, segs, 1, false, -Math.PI / 2, Math.PI);
+    geo.rotateX(-Math.PI / 2); // osa válce (délka) -> vozidlová osa Z; půlkruh (0..r) -> vozidlová výška Y
+    const g = new THREE.Mesh(geo, m);
+    g.position.set(0, y, z);
+    g.castShadow = true;
+    return g;
+}
 
 export function buildHymercar() {
     const g = new THREE.Group();
-    const cream = mat(0xe9e2d2);          // krémová karoserie
-    const creamDark = mat(0xd8d0bd);
-    const white = mat(0xf4f4f0, { rough: 0.6 });   // vysoká střecha
-    const glass = mat(0x20262e, { rough: 0.25, metal: 0.4 });
-    const brown = mat(0x6b4a33);          // hnědý pruh
-    const orange = mat(0xc96f3b);         // oranžový pruh
-    const black = mat(0x1d1d20, { rough: 0.6 });
-    const grey = mat(0x8b8b90);
+    const cream = mat(0xe8e1cf, { rough: 0.35 });          // krémová karoserie (lak)
+    const creamDark = mat(0xd7cdb6, { rough: 0.4 });        // spodní práh / lišty
+    const white = mat(0xf5f4ef, { rough: 0.42, flat: true }); // vysoká klenutá střecha + alkovna
+    const glass = mat(0x171b21, { rough: 0.15, metal: 0.55, flat: true });
+    const brown = mat(0x6b4830, { rough: 0.5 });            // hnědý pruh
+    const orange = mat(0xc96a34, { rough: 0.5 });           // oranžový pruh
+    const black = mat(0x1c1c1f, { rough: 0.65 });
+    const grey = mat(0x7d7d82, { rough: 0.5, metal: 0.2 }); // nárazníky/lišty
+    const hubM = mat(0xc9c9c2, { rough: 0.35, metal: 0.4, flat: true });
+    const tyreM = mat(0x17171a, { rough: 0.9, flat: true });
+    const headM = mat(0xfff2c0, { extra: { emissive: 0xffe6a0, emissiveIntensity: 0.9 } });
+    const tailM = mat(0xa02a22, { extra: { emissive: 0x7a1810, emissiveIntensity: 0.75 } });
+    const plateM = mat(0xf2f2ea, { rough: 0.5 });
 
-    // karoserie — Ducato Mk1: krátký nos, kolmá záď
-    g.add(box(2.02, 1.06, 4.55, cream, 0, 1.08, -0.1));            // hlavní trup
-    g.add(box(2.02, 0.42, 0.75, cream, 0, 0.86, 2.15));            // kapota (nos)
-    const noseTop = box(2.0, 0.1, 0.72, creamDark, 0, 1.09, 2.14); // hrana kapoty
-    g.add(noseTop);
+    // --- hlavní hull (krémová karoserie) ---
+    g.add(box(2.05, 1.0, 4.35, cream, 0, 1.08, -0.15));             // hlavní trup (obytná skříň + kabina)
+    g.add(box(2.07, 0.1, 4.35, creamDark, 0, 0.60, -0.15));         // spodní práh (přesahuje pod hull — žádná koplanární hrana)
 
-    // čelní sklo (skloněné)
-    const ws = box(1.86, 0.78, 0.06, glass, 0, 1.72, 1.78);
-    ws.rotation.x = -0.32;
+    // --- kapota (krátký nos, sešikmená hrana) ---
+    g.add(wedgeFront(1.95, 0.5, 0.5, 0.15, cream, 0, 1.15, 2.15));
+
+    // --- čelní sklo (skloněné) + A-sloupky ---
+    const ws = box(1.86, 0.85, 0.06, glass, 0, 1.7, 1.66);
+    ws.rotation.x = -0.34;
     g.add(ws);
-    // A-sloupky náznak
-    g.add(box(1.94, 0.5, 0.5, cream, 0, 1.86, 1.5));
+    g.add(box(0.12, 0.62, 0.3, cream, -0.95, 1.75, 1.75)); // A-sloupky před hranou bočního okna
+    g.add(box(0.12, 0.62, 0.3, cream, 0.95, 1.75, 1.75));
 
-    // vysoká bílá střecha s žebrováním (Hymer high-top)
-    g.add(box(1.9, 0.62, 3.7, white, 0, 2.34, -0.25));
-    g.add(box(1.68, 0.3, 3.3, white, 0, 2.78, -0.25));
-    for (let i = 0; i < 5; i++) {                                   // žebra
-        g.add(box(1.92, 0.045, 0.1, mat(0xe4e4de), 0, 2.56, 1.3 - i * 0.75));
-    }
-    g.add(box(0.55, 0.09, 0.75, grey, 0.2, 2.97, 0.3));             // střešní okno/vent
-    g.add(box(0.45, 0.06, 0.5, black, -0.45, 2.96, -1.2));          // druhý vent
+    // --- zaoblená vysoká střecha (hlavní klenba nad obytnou skříní) ---
+    g.add(dome(1.02, 3.5, white, 1.58, -0.55, 8));
+    // --- ALKOVNA — charakteristický přesah nad kabinou, vyšší a kratší klenba ---
+    g.add(dome(1.0, 0.95, white, 1.75, 1.625, 8));
+    // lišta na švu klenba/hull (schová spáru, dá to hranu)
+    g.add(box(2.08, 0.05, 4.35, creamDark, 0, 1.605, -0.15));
+    // ventilace na střeše
+    g.add(box(0.5, 0.08, 0.35, grey, 0, 2.69, 1.9));                // vent na hraně alkovny (zapuštěný do klenby)
+    g.add(box(0.55, 0.09, 0.7, grey, 0.15, 2.57, -0.3));            // střešní okno/vent
+    g.add(box(0.4, 0.06, 0.45, black, -0.4, 2.6, -1.3));            // druhý vent
 
-    // boční okna
-    g.add(box(2.06, 0.5, 1.05, glass, 0, 1.82, 0.62));              // přední boční
-    g.add(box(2.06, 0.44, 1.15, glass, 0, 1.8, -0.85));             // obytné okno
-    // zadní okno
-    g.add(box(1.5, 0.5, 0.06, glass, 0, 1.85, -2.36));
+    // --- boční okna ---
+    g.add(box(2.08, 0.42, 0.85, glass, 0, 1.35, 1.15));             // přední boční (kabina)
+    g.add(box(2.08, 0.4, 1.3, glass, 0, 1.3, -1.1));                // obytné okno
+    // zadní okna (naznačují dvoukřídlé dveře)
+    g.add(box(0.55, 0.42, 0.04, glass, -0.42, 1.35, -2.33));
+    g.add(box(0.55, 0.42, 0.04, glass, 0.42, 1.35, -2.33));
+    g.add(box(0.03, 0.9, 0.05, black, 0, 1.15, -2.34));             // spára dveří
 
-    // pruhy — hnědý + oranžový (podle fotky)
-    g.add(box(2.06, 0.13, 4.35, brown, 0, 1.28, -0.15));
-    g.add(box(2.06, 0.06, 4.35, orange, 0, 1.18, -0.15));
+    // --- pruhy (hnědý + oranžový) ---
+    g.add(box(2.07, 0.14, 4.3, brown, 0, 1.32, -0.15));
+    g.add(box(2.07, 0.06, 4.3, orange, 0, 1.22, -0.15));
 
-    // maska, světla, nárazníky
-    g.add(box(1.5, 0.3, 0.08, black, 0, 0.88, 2.53));               // mřížka
-    g.add(box(0.34, 0.16, 0.06, mat(0xfff3c4, { extra: { emissive: 0xffe9a0, emissiveIntensity: 0.9 } }), -0.75, 0.9, 2.55));
-    g.add(box(0.34, 0.16, 0.06, mat(0xfff3c4, { extra: { emissive: 0xffe9a0, emissiveIntensity: 0.9 } }), 0.75, 0.9, 2.55));
-    g.add(box(0.16, 0.12, 0.05, orange, -0.99, 0.72, 2.55));        // blinkry
-    g.add(box(0.16, 0.12, 0.05, orange, 0.99, 0.72, 2.55));
-    g.add(box(2.1, 0.22, 0.14, mat(0x55555c), 0, 0.62, 2.5));       // přední nárazník
-    g.add(box(2.1, 0.22, 0.14, mat(0x55555c), 0, 0.62, -2.42));     // zadní nárazník
-    g.add(box(0.5, 0.14, 0.04, mat(0xffffff), 0, 0.82, 2.56));      // SPZ
-    // zadní světla
-    g.add(box(0.16, 0.3, 0.05, mat(0xa03028, { extra: { emissive: 0x801a12, emissiveIntensity: 0.7 } }), -0.85, 1.0, -2.4));
-    g.add(box(0.16, 0.3, 0.05, mat(0xa03028, { extra: { emissive: 0x801a12, emissiveIntensity: 0.7 } }), 0.85, 1.0, -2.4));
-    // zrcátka
-    g.add(box(0.06, 0.22, 0.16, black, -1.1, 1.6, 1.7));
-    g.add(box(0.06, 0.22, 0.16, black, 1.1, 1.6, 1.7));
+    // --- maska, světla, nárazníky (nos) ---
+    g.add(box(1.5, 0.24, 0.06, black, 0, 1.0, 2.42));               // mřížka
+    g.add(box(0.32, 0.15, 0.06, headM, -0.72, 1.05, 2.43));         // světlomety (obdélníkové)
+    g.add(box(0.32, 0.15, 0.06, headM, 0.72, 1.05, 2.43));
+    g.add(box(0.15, 0.1, 0.05, orange, -0.95, 0.95, 2.43));         // blinkry
+    g.add(box(0.15, 0.1, 0.05, orange, 0.95, 0.95, 2.43));
+    g.add(box(2.05, 0.22, 0.18, grey, 0, 0.55, 2.35));              // přední nárazník
+    g.add(box(0.46, 0.13, 0.03, plateM, 0, 0.78, 2.44));            // přední SPZ
 
-    // kola
+    // --- záď ---
+    g.add(box(2.05, 0.22, 0.18, grey, 0, 0.55, -2.4));              // zadní nárazník
+    g.add(box(0.16, 0.28, 0.05, tailM, -0.85, 1.0, -2.36));         // koncovky
+    g.add(box(0.16, 0.28, 0.05, tailM, 0.85, 1.0, -2.36));
+    g.add(box(0.46, 0.13, 0.03, plateM, 0, 0.85, -2.35));           // zadní SPZ
+
+    // --- zrcátka ---
+    g.add(box(0.06, 0.2, 0.16, black, -1.09, 1.62, 1.55));
+    g.add(box(0.06, 0.2, 0.16, black, 1.09, 1.62, 1.55));
+
+    // --- kola ---
     const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.26, 10);
     const hubGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.28, 8);
-    const tyre = mat(0x17171a, { rough: 0.9 });
-    const hub = mat(0xcfcfc6, { rough: 0.4, metal: 0.3 });
     const wheels = [];
     const wPos = [[-0.92, 1.55], [0.92, 1.55], [-0.92, -1.45], [0.92, -1.45]];
     for (let i = 0; i < 4; i++) {
         const grp = new THREE.Group();
-        const t = new THREE.Mesh(wheelGeo, tyre); t.rotation.z = Math.PI / 2; t.castShadow = true;
-        const h = new THREE.Mesh(hubGeo, hub); h.rotation.z = Math.PI / 2;
+        const t = new THREE.Mesh(wheelGeo, tyreM); t.rotation.z = Math.PI / 2; t.castShadow = true;
+        const h = new THREE.Mesh(hubGeo, hubM); h.rotation.z = Math.PI / 2;
         const spin = new THREE.Group(); spin.add(t); spin.add(h);
         grp.add(spin);
         grp.position.set(wPos[i][0], 0.36, wPos[i][1]);
@@ -155,48 +182,6 @@ export class Van {
         this._snapA = { x: 0, y: 0.95, z: 4, visY: 10, q: new THREE.Quaternion() };
         this._snapB = { x: 0, y: 0.95, z: 4, visY: 10, q: new THREE.Quaternion() };
         this._yawRate = 0;
-
-        // do doby, než se načte skutečný model, jede procedurální low-poly Hymercar (viz výše);
-        // GLB výměna je čistě kosmetická a nesmí shodit hru, když se nenačte (offline, 404, chybný soubor…)
-        this._loadHymerGLB();
-    }
-
-    /** asynchronně načte detailní GLB model a vymění za něj procedurální; při chybě zůstává procedurální model */
-    _loadHymerGLB() {
-        if (!_hymerGLTFCache) {
-            const loader = new GLTFLoader();
-            _hymerGLTFCache = new Promise((resolve, reject) => {
-                loader.load(HYMER_GLB_URL, resolve, undefined, reject);
-            });
-        }
-        _hymerGLTFCache.then(gltf => {
-            // scéna může být sdílená napříč instancemi (teoreticky), naklonuj hierarchii pro tuto instanci
-            const root = gltf.scene.clone(true);
-            root.rotation.y = HYMER_GLB_YAW;
-            root.scale.setScalar(HYMER_GLB_SCALE);
-            root.traverse(o => {
-                if (o.isMesh) {
-                    o.castShadow = true;
-                    o.receiveShadow = false;
-                    if (o.material) {
-                        // jen scalar faktor roughness (násobí texturovou roughness-mapu) — mapy samotné se nemění
-                        o.material.roughness = 0.5;
-                        o.material.needsUpdate = true;
-                    }
-                }
-            });
-
-            const tilt = new THREE.Group();
-            tilt.add(root);
-
-            // procedurální tělo + statická kola pryč, nahradí je GLB (kola jsou v meshi zapečená)
-            for (const c of [...this.mesh.children]) this.mesh.remove(c);
-            this.mesh.add(tilt);
-            this.bodyTilt = tilt;
-            this.wheels = [];
-        }).catch(err => {
-            console.warn('Hymer GLB se nepodařilo načíst, zůstává procedurální model vozu.', err);
-        });
     }
 
     reset() {
