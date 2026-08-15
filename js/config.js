@@ -217,10 +217,10 @@ export const CONFIG = {
         glitterAmp: 0.012,        // síla mikro-třpytu — láme lalok na jiskřičky (dál sníženo, viz i frekvence + fade níže)
         glitterFadeNear: 22,      // m — od této vzdálenosti mikro-třpyt začíná mizet (drží ho jen blízko kamery)
         glitterFadeFar: 45,       // m — za touto vzdáleností je mikro-třpyt už nulový -> žádný per-pixel screen-door na zbytku hladiny
-        foamThreshold: 0.78,      // práh výška+strmost -> zpěněný hřeben (sníženo z 1.55 — reálný rozsah vH/vSteep [0..~2.5] ho nikdy nepřekročil, pěna se nikdy nezobrazila)
+        foamThreshold: 1.25,      // práh výška+strmost -> zpěněný hřeben (jen občasné čepičky, ne plachty — na hrubé síti dělají nízké prahy polygonální bílé plochy)
         foamSoftness: 0.3,        // šířka přechodu prahu (smoothstep)
-        foamSteepWeight: 2.6,     // váha strmosti vlny v prahu pěny (zvýšeno, ať strmé hřebeny pěnu spíš vyvolají)
-        foamIntensity: 0.55,      // krytí bílou barvou v hřebeni (mírně sníženo z 0.75, ať jsou čepičky jemné a jen občasné, ne plná bílá plocha)
+        foamSteepWeight: 2.0,     // váha strmosti vlny v prahu pěny
+        foamIntensity: 0.38,      // krytí bílou barvou v hřebeni — jemné čepičky
         shoreDist: 100,           // m od kamery — dosah mělčinového tyrkysu
         shoreStrength: 0.5,       // síla mělčinového přísvitu blízko pobřeží/kamery
     },

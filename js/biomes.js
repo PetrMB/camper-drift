@@ -149,7 +149,8 @@ export class Sea {
                     // hloubkový gradient: základní deep/light mix podle výšky vlny
                     vec3 c = mix(uDeep, uLight, clamp(vH * 0.35 + 0.45, 0.0, 1.0));
                     // + mělčinový (tyrkysový) přísvit blízko kamery/pobřeží — voda "průzračnější"
-                    vec3 shallow = clamp(uLight * 1.35 + vec3(0.05, 0.14, 0.10), 0.0, 1.0);
+                    // mělčina míří k pevné tyrkysové (mix se světlou barvou moře) — žádný clamp do bíla
+                    vec3 shallow = mix(vec3(0.22, 0.62, 0.60), uLight, 0.35);
                     float shoreT = (1.0 - smoothstep(0.0, uShoreDist, vDist)) * uShoreStrength;
                     c = mix(c, shallow, shoreT);
 
@@ -157,7 +158,7 @@ export class Sea {
                     // ještě PŘED skutečným fogNear — jinak v pásmu shoreDist..fogNear (typicky při
                     // západu, kde je fogNear až 130 m) prosvítá syrová hlubinová barva (indigový flek)
                     float preFogEdge = max(uFogNear, uShoreDist + 1.0);
-                    float preFog = smoothstep(uShoreDist, preFogEdge, vDist) * 0.65;
+                    float preFog = smoothstep(uShoreDist, preFogEdge, vDist) * 0.25;
                     c = mix(c, uFogColor, preFog);
 
                     // mikro-třpyt navrch na analytickou normálu vlny — láme spekulární lalok na jiskřičky.
@@ -250,6 +251,7 @@ export class WorldEnv {
         const sc = this.sun.shadow.camera;
         sc.left = -60; sc.right = 60; sc.top = 60; sc.bottom = -60; sc.near = 10; sc.far = 360;
         this.sun.shadow.bias = -0.0004;
+        this.sun.shadow.normalBias = 0.6; // proti pruhování (acne) na pevnině při nízkém slunci/noci
         scene.add(this.sun);
         scene.add(this.sun.target);
     }
@@ -488,7 +490,7 @@ export class Props {
             pine: new InstPool(instanced(new THREE.ConeGeometry(1.4, 3.4, 7), std({ color: 0x3e7a52, roughness: 0.9, flatShading: true }), 140), 140),
             cyp: new InstPool(instanced(new THREE.ConeGeometry(0.65, 3.8, 6), std({ color: 0x2e5a3c, roughness: 0.9, flatShading: true }), 120), 120),
             trunk: new InstPool(instanced(new THREE.CylinderGeometry(0.2, 0.28, 1.6, 6), std({ color: 0x6d4c33, roughness: 1 }), 220), 220),
-            wall: new InstPool(instanced(new THREE.BoxGeometry(3.2, 0.55, 0.35), std({ color: 0xd8cfc0, roughness: 0.95 }), 220), 220),
+            wall: new InstPool(instanced(new THREE.BoxGeometry(3.2, 0.55, 0.35), std({ color: 0xd8cfc0, roughness: 0.95 }), 480), 480),
             rock: new InstPool(instanced(new THREE.IcosahedronGeometry(1, 0), std({ color: 0x8a8078, roughness: 1, flatShading: true }), 40), 40),
             lamp: new InstPool(instanced(new THREE.BoxGeometry(0.5, 0.12, 0.9), std({ color: 0xfff0c0, emissive: 0xffe9a0, emissiveIntensity: 1.6 }), 60), 60),
             // odrazky na svodidle u moře — emisivní, v noci je zvýrazní bloom

@@ -17,13 +17,15 @@ export class Road {
     constructor(scene, hooks) {
         this.scene = scene;
         this.hooks = hooks || {};
-        this.asphalt = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
-        this.lineMat = new THREE.MeshBasicMaterial({ color: 0xf5f2e8 });
-        this.centerMat = new THREE.MeshBasicMaterial({ color: 0xf2d98a }); // přerušovaná žlutobílá středová čára
+        // DoubleSide na plochách světa: vyvýšené úseky silnice/terénu jsou jinak při pohledu
+        // zespodu odculled a ve vzduchu "létají" stromy a stuha silnice
+        this.asphalt = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
+        this.lineMat = new THREE.MeshBasicMaterial({ color: 0xf5f2e8, side: THREE.DoubleSide });
+        this.centerMat = new THREE.MeshBasicMaterial({ color: 0xf2d98a, side: THREE.DoubleSide }); // přerušovaná žlutobílá středová čára
         this.wheelMat = new THREE.MeshBasicMaterial({ color: 0x15151a, transparent: true, opacity: 0.3, depthWrite: false }); // vyjeté pruhy kol
-        this.landMat = new THREE.MeshStandardMaterial({ color: 0x9dbb6a, roughness: 1 });
-        this.cliffMat = new THREE.MeshStandardMaterial({ color: 0xb09a80, roughness: 1, flatShading: true });
-        this.foamMat = new THREE.MeshBasicMaterial({ color: 0xf0f8f5, transparent: true, opacity: 0.85 });
+        this.landMat = new THREE.MeshStandardMaterial({ color: 0x9dbb6a, roughness: 1, side: THREE.DoubleSide });
+        this.cliffMat = new THREE.MeshStandardMaterial({ color: 0xb09a80, roughness: 1, flatShading: true, side: THREE.DoubleSide });
+        this.foamMat = new THREE.MeshBasicMaterial({ color: 0xf0f8f5, transparent: true, opacity: 0.85, side: THREE.DoubleSide });
         this.reset(1234567);
     }
 
