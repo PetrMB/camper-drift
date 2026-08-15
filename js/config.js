@@ -231,8 +231,8 @@ export const CONFIG = {
     sky: {
         sunSizeLow: 30,        // poloměr slunečního kotouče nízko nad obzorem (m)
         sunSizeHigh: 12,       // poloměr vysoko na obloze (v poledne)
-        sunGlowLow: 100,       // poloměr měkkého glow sprite (nízko)
-        sunGlowHigh: 40,       // poloměr glow sprite (vysoko)
+        sunGlowLow: 62,        // poloměr měkkého glow sprite (nízko) — menší, ať neoslní celý záběr
+        sunGlowHigh: 34,       // poloměr glow sprite (vysoko)
         sunCoreBoostLow: 0.9,  // multiplikátor jasu jádra nízko nad obzorem (< 1 aby jádro nevypálilo bloomem do bíla; jas dodává sunGlow)
         sunCoreBoostHigh: 1.6, // multiplikátor jasu jádra vysoko na obloze (menší bílé slunce může být jasnější)
         sunHeightMin: 0.22,    // rozsah normalizované výšky slunce (sunDir.y) pro škálování
@@ -242,10 +242,10 @@ export const CONFIG = {
         starRadius: 430,       // poloměr kopule s hvězdami
         flareOffsets: [0.3, 0.56, 0.86],   // pozice na ose slunce->střed obrazu (0=u slunce, 1=u středu)
         flareSizes: [11, 20, 8],
-        flareOpac: [0.6, 0.45, 0.3],       // výrazně čitelnější na teplé obloze (studenější barva, viz Sky)
+        flareOpac: [0.38, 0.28, 0.19],     // čitelný, ale nesmí bránit výhledu při jízdě proti slunci
         flareColor: 0xdcecff,   // studený kontrastní tón (odlišný od teplé oblohy)
         streakSize: [130, 3.2], // [délka, výška] horizontálního "anamorfního" streak prvku (m)
-        streakOpac: 0.4,
+        streakOpac: 0.26,
     },
 
     // post-processing — filmový arkádový look (NFS Hot Pursuit): bloom + grading pass
