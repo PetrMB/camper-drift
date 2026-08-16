@@ -1,9 +1,19 @@
-// Hymercar 1987 (Fiat Ducato Mk1) — procedurální low-poly model + arkádový drift controller
+// Hymercar 1987 (Fiat Ducato Mk1) — decimovaný model uživatele (GLB) + arkádový drift controller
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { CONFIG, clamp, lerp, wrapAngle } from './config.js';
 import { createVanBody } from './physics.js';
 
 const P = CONFIG.physics;
+
+// decimovaná verze uživatelova modelu (~5.9k trojúhelníků, původní textury);
+// do načtení jede procedurální fallback
+const HYMER_GLB_URL = 'assets/hymer.glb';
+const HYMER_GLB_LENGTH = 4.43;
+const HYMER_TARGET_LENGTH = 4.9;
+const HYMER_GLB_SCALE = HYMER_TARGET_LENGTH / HYMER_GLB_LENGTH;
+const HYMER_GLB_YAW = Math.PI / 2;   // předek reference je v +X -> otočit do +Z (ověřeno vizuálně)
+let _hymerGLTFCache = null;
 
 // ---------- model ----------
 function mat(color, opts = {}) {
@@ -185,6 +195,7 @@ export class Van {
         this.wheels = m.wheels;
         this.bodyTilt = m.bodyTilt;
         scene.add(this.mesh);
+        this._loadHymerGLB();
 
         const ph = createVanBody(0, 0.95, 4);
         this.body = ph.body;
@@ -214,6 +225,44 @@ export class Van {
         this._snapA = { x: 0, y: 0.95, z: 4, visY: 10, q: new THREE.Quaternion() };
         this._snapB = { x: 0, y: 0.95, z: 4, visY: 10, q: new THREE.Quaternion() };
         this._yawRate = 0;
+    }
+
+    /** asynchronně vymění procedurální fallback za decimovaný model uživatele */
+    _loadHymerGLB() {
+        if (!_hymerGLTFCache) {
+            const loader = new GLTFLoader();
+            _hymerGLTFCache = new Promise((resolve, reject) => {
+                loader.load(HYMER_GLB_URL, resolve, undefined, reject);
+            });
+        }
+        _hymerGLTFCache.then(gltf => {
+            const root = gltf.scene.clone(true);
+            root.rotation.y = HYMER_GLB_YAW;
+            root.scale.setScalar(HYMER_GLB_SCALE);
+            root.traverse(o => {
+                if (o.isMesh) {
+                    o.castShadow = true;
+                    o.receiveShadow = false;
+                    if (o.material) {
+                        // flat shading = fasetovaný low-poly vzhled sedící ke stylu hry
+                        o.material.flatShading = true;
+                        o.material.roughness = 0.55;
+                        o.material.needsUpdate = true;
+                    }
+                }
+            });
+
+            const tilt = new THREE.Group();
+            tilt.add(root);
+
+            // procedurální tělo + kola pryč — GLB má kola zapečená v meshi
+            for (const c of [...this.mesh.children]) this.mesh.remove(c);
+            this.mesh.add(tilt);
+            this.bodyTilt = tilt;
+            this.wheels = [];
+        }).catch(err => {
+            console.warn('Hymer GLB se nepodařilo načíst, zůstává procedurální model vozu.', err);
+        });
     }
 
     reset() {
