@@ -5,25 +5,23 @@ import { getSettings, patchSettings } from './config/store'
 import { log } from './log'
 
 /**
- * `chrome` = hlavička + stavový řádek + odsazení na stín.
- * `rowSingle` / `rowMulti` = výška jedné karty účtu; v multi režimu má karta
- * navíc řádek s názvem účtu.
+ * Šířka je pevná, výška NENÍ — tu si po každém renderu naměří renderer
+ * z reálného obsahu a pošle přes `cm:window:setHeight`. Napevno spočítané
+ * výšky se rozbíjejí při jiném fontu (chybějící SKODA Next → Segoe UI)
+ * a při DPI škálování Windows; hodnoty níž slouží jen jako odhad do doby,
+ * než dorazí první měření.
  */
-const SIZES: Record<WindowMode, { width: number; chrome: number; rowSingle: number; rowMulti: number }> = {
-  compact: { width: 300, chrome: 62, rowSingle: 94, rowMulti: 118 },
-  expanded: { width: 340, chrome: 62, rowSingle: 300, rowMulti: 324 },
-  settings: { width: 380, chrome: 34, rowSingle: 486, rowMulti: 486 },
+const SIZES: Record<WindowMode, { width: number; initialHeight: number }> = {
+  compact: { width: 300, initialHeight: 160 },
+  expanded: { width: 340, initialHeight: 380 },
+  settings: { width: 380, initialHeight: 520 },
 }
 
-/** Výška hlášky o stavu (token vypršel, 429, …) — až dva řádky. */
-const DETAIL_ROW = 36
-
-/** Nad tuhle výšku okno neroste — body má vlastní scroll. */
+const MIN_HEIGHT = 96
 const MAX_HEIGHT = 900
 
 let win: BrowserWindow | null = null
-let accountCount = 1
-let detailRows = 0
+let measuredHeight: number | null = null
 
 export function getWindow(): BrowserWindow | null {
   return win
@@ -34,7 +32,7 @@ export function createWindow(isDev: boolean, rendererUrl: string | null): Browse
 
   win = new BrowserWindow({
     width: SIZES.compact.width,
-    height: SIZES.compact.chrome + SIZES.compact.rowSingle,
+    height: SIZES.compact.initialHeight,
     show: false,
     frame: false,
     transparent: true,
@@ -112,24 +110,31 @@ function clampToDisplay(): void {
   }
 }
 
-/**
- * Okno si drží pevnou výšku — proto musí main vědět nejen kolik je účtů,
- * ale i kolik z nich má hlášku o stavu, aby se text nikdy neuřízl.
- */
-export function setAccountCount(count: number, detailCount = 0): void {
-  accountCount = Math.max(1, count)
-  detailRows = Math.max(0, detailCount)
-  applyMode(getSettings().window.mode)
-}
-
 export function applyMode(mode: WindowMode): void {
   if (!win) return
   const size = SIZES[mode]
-  const rows = mode === 'settings' ? 1 : accountCount
-  const rowHeight = rows > 1 ? size.rowMulti : size.rowSingle
-  const details = mode === 'settings' ? 0 : detailRows * DETAIL_ROW
-  const height = Math.min(MAX_HEIGHT, size.chrome + rows * rowHeight + details)
-  win.setContentSize(size.width, Math.round(height))
+  // Výška je jen odhad; renderer ji hned po vykreslení upřesní.
+  const [, currentHeight] = win.getContentSize()
+  const height = measuredHeight ?? currentHeight ?? size.initialHeight
+  win.setContentSize(size.width, clampHeight(height))
+  clampToDisplay()
+}
+
+function clampHeight(height: number): number {
+  return Math.round(Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, height)))
+}
+
+/**
+ * Výška naměřená rendererem z reálného obsahu. Tím odpadá jakékoli hádání
+ * podle počtu účtů, délky hlášek, fontu nebo DPI — a nevzniká posuvník.
+ */
+export function setMeasuredHeight(height: number): void {
+  if (!win || !Number.isFinite(height)) return
+  const target = clampHeight(height)
+  const [width, current] = win.getContentSize()
+  if (Math.abs(current - target) <= 1) return
+  measuredHeight = target
+  win.setContentSize(width, target)
   clampToDisplay()
 }
 

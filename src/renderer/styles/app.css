@@ -137,8 +137,22 @@ body {
 .body {
   flex: 1;
   min-height: 0;
-  overflow: hidden auto;
   padding: 0 var(--cm-space-3) var(--cm-space-2);
+  /* Výšku okna řídí naměřený obsah, takže widget nikdy neroluje. */
+  overflow: hidden;
+}
+
+/* Neroste do zbylého místa — jen z něj se dá naměřit skutečná výška obsahu. */
+.body-inner {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Nastavení jsou jediné místo, kde rolování dává smysl. */
+body[data-mode="settings"] .body {
+  overflow: hidden auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cm-track) transparent;
 }
 
 /* ── Řádek účtu ────────────────────────────────────────────────────────── */

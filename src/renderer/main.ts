@@ -35,6 +35,13 @@ header.append(headerDot, headerTitle, spacer, refreshBtn, expandBtn, settingsBtn
 const body = document.createElement('div')
 body.className = 'body'
 
+// Vnitřní obal, který NEROSTE do zbylého místa — z něj se měří skutečná výška
+// obsahu. Kdyby se měřil rovnou `body` (flex: 1), vrátil by vždy výšku okna
+// a widget by se nikdy nezmenšil.
+const bodyInner = document.createElement('div')
+bodyInner.className = 'body-inner'
+body.append(bodyInner)
+
 const status = document.createElement('div')
 status.className = 'status t-disclaimer'
 const staleDot = document.createElement('div')
@@ -96,15 +103,16 @@ function applyMode(mode: WindowMode): void {
   document.body.dataset.mode = mode
   // Karty se pro compact a expanded staví jinak (větší prstenec, sekce navíc).
   cards.clear()
-  body.textContent = ''
+  bodyInner.textContent = ''
   if (mode === 'settings') {
-    body.append(settingsView.el)
-    void settingsView.refresh()
+    bodyInner.append(settingsView.el)
+    void settingsView.refresh().then(scheduleHeightReport)
     status.style.display = 'none'
   } else {
     status.style.display = ''
     if (current) render(current)
   }
+  scheduleHeightReport()
 }
 
 function render(snapshot: AppSnapshot): void {
@@ -127,13 +135,13 @@ function render(snapshot: AppSnapshot): void {
   }
 
   if (snapshot.accounts.length === 0) {
-    body.textContent = ''
+    bodyInner.textContent = ''
     cards.clear()
     const empty = document.createElement('div')
     empty.className = 'muted t-caption2'
     empty.textContent =
       'Nenašel jsem přihlášený Claude Code. Přihlas se příkazem claude a otevři nastavení.'
-    body.append(empty)
+    bodyInner.append(empty)
   } else {
     // Karty vytváříme/rušíme jen při změně množiny účtů, jinak jen updatujeme.
     const live = new Set(snapshot.accounts.map((a) => a.id))
@@ -148,7 +156,7 @@ function render(snapshot: AppSnapshot): void {
       if (!c) {
         c = createAccountCard(account.id, currentMode === 'expanded')
         cards.set(account.id, c)
-        body.append(c.el)
+        bodyInner.append(c.el)
       }
       c.update(account, composition, currentMode, nowMs)
       c.el.classList.toggle('soonest', snapshot.layout === 'multi' && account.id === soonest)
@@ -171,6 +179,41 @@ function render(snapshot: AppSnapshot): void {
   if (snapshot.unknownApiKeys.length) parts.push('API vrátilo neznámá pole')
   statusText.textContent = parts.join(' · ')
   status.title = statusText.textContent
+
+  scheduleHeightReport()
+}
+
+let lastSentHeight = 0
+
+/**
+ * Výšku okna určuje skutečný obsah, ne napevno spočítané tabulky.
+ * Bez tohohle se widget rozbije při jiném fontu (chybí SKODA Next → Segoe UI)
+ * nebo při DPI škálování Windows — objeví se posuvník nebo useknutý text.
+ */
+function reportHeight(): void {
+  const rootStyle = getComputedStyle(root)
+  const padding =
+    parseFloat(rootStyle.paddingTop || '0') + parseFloat(rootStyle.paddingBottom || '0')
+  const bodyStyle = getComputedStyle(body)
+  const bodyPadding =
+    parseFloat(bodyStyle.paddingTop || '0') + parseFloat(bodyStyle.paddingBottom || '0')
+
+  const needed =
+    header.offsetHeight +
+    bodyInner.getBoundingClientRect().height +
+    bodyPadding +
+    (status.style.display === 'none' ? 0 : status.offsetHeight) +
+    padding
+
+  const rounded = Math.ceil(needed)
+  if (Math.abs(rounded - lastSentHeight) <= 1) return
+  lastSentHeight = rounded
+  void window.claudeMonitor.window.setHeight(rounded)
+}
+
+function scheduleHeightReport(): void {
+  // Až po dokreslení, aby scrollHeight odpovídal finálnímu layoutu.
+  requestAnimationFrame(() => requestAnimationFrame(reportHeight))
 }
 
 function tick(): void {
@@ -211,6 +254,10 @@ async function refreshState(): Promise<void> {
   const snapshot = await window.claudeMonitor.getState()
   render(snapshot)
 }
+
+// Záchytná síť: cokoli změní obsah (přidání účtu v nastavení, zalomení textu
+// jinou šířkou fontu), přeměří se výška bez ohledu na to, kdo změnu vyvolal.
+new ResizeObserver(reportHeight).observe(bodyInner)
 
 window.claudeMonitor.onState(render)
 window.claudeMonitor.onToast(showToast)

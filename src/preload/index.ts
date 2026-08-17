@@ -67,6 +67,8 @@ const api = {
 
   window: {
     setMode: (mode: WindowMode): Promise<void> => ipcRenderer.invoke(CH.WINDOW_SET_MODE, { mode }),
+    setHeight: (height: number): Promise<void> =>
+      ipcRenderer.invoke(CH.WINDOW_SET_HEIGHT, { height }),
     setAlwaysOnTop: (value: boolean): Promise<void> =>
       ipcRenderer.invoke(CH.WINDOW_SET_ALWAYS_ON_TOP, { value }),
     hide: (): Promise<void> => ipcRenderer.invoke(CH.WINDOW_HIDE),

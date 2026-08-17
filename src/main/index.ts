@@ -28,7 +28,7 @@ import { handleFontScheme, registerFontScheme } from './fontProtocol'
 import { evaluateNotifications, fire, loadFired, saveFired } from './notify'
 import { pushSnapshot, registerIpc } from './ipcRouter'
 import { createTray, getTray, rebuildMenu, setStartWithWindows, updateTray } from './tray'
-import { applyMode, createWindow, getWindow, setAccountCount } from './windowManager'
+import { applyMode, createWindow, getWindow } from './windowManager'
 import { readCredentials } from './data/credentials'
 import { detectClaudeCodeVersion, fetchUsage } from './data/usageApi'
 
@@ -72,8 +72,6 @@ function publish(): void {
   const snap = snapshot()
   pushSnapshot(snap)
   updateTray(snap, now())
-  // Okno má pevnou výšku, takže musí vědět, kolik karet nese hlášku o stavu.
-  setAccountCount(snap.accounts.length, snap.accounts.filter((a) => a.statusDetail).length)
 
   const intents = evaluateNotifications(previousSnapshot, snap, getSettings(), fired, now())
   if (intents.length) {
@@ -161,8 +159,6 @@ function syncWatchers(): void {
     )
     void refreshLocal(account)
   }
-
-  setAccountCount(accounts.length)
 }
 
 function diagnostics(): string {

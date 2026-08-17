@@ -16,6 +16,7 @@ export const CH = {
   SETTINGS_GET: 'cm:settings:get',
   SETTINGS_SET: 'cm:settings:set',
   WINDOW_SET_MODE: 'cm:window:setMode',
+  WINDOW_SET_HEIGHT: 'cm:window:setHeight',
   WINDOW_SET_ALWAYS_ON_TOP: 'cm:window:setAlwaysOnTop',
   WINDOW_HIDE: 'cm:window:hide',
   WINDOW_QUIT: 'cm:window:quit',

@@ -62,11 +62,11 @@ function account(overrides = {}) {
 
 const SCENES = {
   'single-compact': {
-    size: { width: 300, height: 156 },
+    width: 300,
     snapshot: { accounts: [account()], layout: 'single', mode: 'compact' },
   },
   'single-critical': {
-    size: { width: 300, height: 156 },
+    width: 300,
     snapshot: {
       accounts: [
         account({
@@ -79,7 +79,7 @@ const SCENES = {
     },
   },
   'dual-compact': {
-    size: { width: 300, height: 298 },
+    width: 300,
     snapshot: {
       accounts: [
         account(),
@@ -97,7 +97,7 @@ const SCENES = {
     },
   },
   'single-expanded': {
-    size: { width: 340, height: 362 },
+    width: 340,
     snapshot: {
       accounts: [
         account({
@@ -111,7 +111,7 @@ const SCENES = {
     },
   },
   'token-expired': {
-    size: { width: 300, height: 192 },
+    width: 300,
     snapshot: {
       accounts: [
         account({
@@ -134,7 +134,7 @@ const browser = await chromium.launch(executablePath ? { executablePath } : {})
 
 for (const [name, scene] of Object.entries(SCENES)) {
   const page = await browser.newPage({
-    viewport: scene.size,
+    viewport: { width: scene.width, height: 400 },
     deviceScaleFactor: 2,
   })
 
@@ -164,16 +164,31 @@ for (const [name, scene] of Object.entries(SCENES)) {
         remove: () => Promise.resolve({ ok: true }),
       },
       settings: { get: () => Promise.resolve({}), set: () => Promise.resolve({}) },
-      window: { setMode: noop, setAlwaysOnTop: noop, hide: noop, quit: noop },
+      window: {
+        setMode: noop,
+        // Tady se ověřuje reálná cesta měření výšky: renderer si ji spočítá
+        // z obsahu úplně stejně jako v Electronu, jen ji zachytíme.
+        setHeight: (h) => {
+          window.__cmHeight = h
+          return Promise.resolve()
+        },
+        setAlwaysOnTop: noop,
+        hide: noop,
+        quit: noop,
+      },
       openExternal: () => Promise.resolve({ ok: false }),
       exportDiagnostics: () => Promise.resolve(''),
     }
   }, snapshot)
 
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
-  await page.waitForTimeout(600)
+  await page.waitForFunction(() => typeof window.__cmHeight === 'number', null, { timeout: 5000 })
+  const height = await page.evaluate(() => window.__cmHeight)
+
+  await page.setViewportSize({ width: scene.width, height })
+  await page.waitForTimeout(400)
   await page.screenshot({ path: join(ROOT, `build/preview-${name}.png`), omitBackground: true })
-  process.stdout.write(`preview-${name}.png\n`)
+  process.stdout.write(`preview-${name}.png  ${scene.width}x${height}\n`)
   await page.close()
 }
 

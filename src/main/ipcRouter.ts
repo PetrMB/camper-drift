@@ -13,7 +13,7 @@ import type {
 import { ACCENT_CHOICES } from '../shared/types'
 import { getSettings, patchSettings, setAccounts } from './config/store'
 import { candidateConfigDirs, guessKind, probeConfigDir, suggestLabel } from './config/accountsDetect'
-import { applyMode, getWindow, openExternal, setAlwaysOnTop } from './windowManager'
+import { applyMode, getWindow, openExternal, setAlwaysOnTop, setMeasuredHeight } from './windowManager'
 import { log } from './log'
 
 export interface RouterDeps {
@@ -165,6 +165,11 @@ export function registerIpc(deps: RouterDeps): void {
     if (mode !== 'compact' && mode !== 'expanded' && mode !== 'settings') return
     patchSettings({ window: { mode: mode as WindowMode } })
     applyMode(mode)
+  })
+
+  ipcMain.handle(CH.WINDOW_SET_HEIGHT, (_e, payload: unknown) => {
+    if (!isRecord(payload) || typeof payload.height !== 'number') return
+    setMeasuredHeight(payload.height)
   })
 
   ipcMain.handle(CH.WINDOW_SET_ALWAYS_ON_TOP, (_e, payload: unknown) => {
