@@ -25,7 +25,8 @@ body {
 
 #root {
   height: 100%;
-  padding: 6px; /* prostor pro stín, aby ho okno neuřízlo */
+  /* Karta vyplní okno beze zbytku — kolem ní je čistá průhlednost, ne stín. */
+  padding: 0;
 }
 
 /* ── Karta ─────────────────────────────────────────────────────────────── */
@@ -37,7 +38,7 @@ body {
   flex-direction: column;
   background: var(--cm-surface);
   border-radius: var(--cm-radius-l);
-  box-shadow: var(--cm-shadow);
+  border: 1px solid var(--cm-edge);
   overflow: hidden;
 }
 

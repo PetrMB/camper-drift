@@ -43,6 +43,11 @@ export function createWindow(isDev: boolean, rendererUrl: string | null): Browse
     skipTaskbar: true,
     alwaysOnTop: s.window.alwaysOnTop,
     backgroundColor: '#00000000',
+    // Windows kolem bezrámového okna jinak maluje vlastní stín a na Win11
+    // i zaoblený okraj — obojí by kolem průhledného widgetu udělalo šedivý lem.
+    hasShadow: false,
+    roundedCorners: false,
+    thickFrame: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
