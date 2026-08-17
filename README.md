@@ -52,13 +52,21 @@ Když `npm` není k nalezení, rozbal si Node portable do svého profilu —
 žádný instalátor, žádná práva správce:
 
 ```powershell
-$dist   = "https://nodejs.org/dist/latest-v22.x/"
-$file   = (Invoke-WebRequest -UseBasicParsing $dist).Links.href |
-          Where-Object { $_ -match '^node-v22\..*-win-x64\.zip$' } | Select-Object -First 1
-Invoke-WebRequest -UseBasicParsing ($dist + $file) -OutFile "$env:TEMP\$file"
-Expand-Archive "$env:TEMP\$file" -DestinationPath "$env:LOCALAPPDATA\node" -Force
+$dist = "https://nodejs.org/dist/latest-v22.x/"
+
+# Název souboru se čte ze SHASUMS256.txt, ne z HTML výpisu adresáře —
+# ten se za firemní proxy často vrátí přepsaný a parsování odkazů selže.
+$sums = (Invoke-WebRequest -UseBasicParsing ($dist + "SHASUMS256.txt")).Content
+$file = [regex]::Match($sums, 'node-v22\.[\d.]+-win-x64\.zip').Value
+if (-not $file) { throw "Nepodařilo se zjistit název archivu. Vypiš `$sums a podívej se, co server vrátil." }
+"Stahuji $file"
+
+$zip = "$env:USERPROFILE\Downloads\$file"
+Invoke-WebRequest -UseBasicParsing ($dist + $file) -OutFile $zip
+Expand-Archive $zip -DestinationPath "$env:LOCALAPPDATA\node" -Force
 
 $nodeDir = (Get-ChildItem "$env:LOCALAPPDATA\node" -Directory | Select-Object -First 1).FullName
+if (-not $nodeDir) { throw "Rozbalení neproběhlo — zkontroluj $env:LOCALAPPDATA\node." }
 $env:Path = "$nodeDir;$env:Path"
 node -v ; npm -v
 ```
