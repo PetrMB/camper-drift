@@ -31,6 +31,9 @@ function windowsOf(a: AccountSnapshot): Array<{ key: '5h' | '7d'; usage: NonNull
   return out
 }
 
+/** O kolik musí vyčerpání klesnout pod práh, než se notifikace zase natáhne. */
+const HYSTERESIS = 5
+
 function inQuietHours(s: Settings, nowMs: number): boolean {
   const q = s.notifications.quietHours
   if (!q) return false
@@ -64,21 +67,32 @@ export function evaluateNotifications(
     for (const { key, usage } of windowsOf(account)) {
       if (usage.source !== 'api') continue
 
-      if (usage.utilization !== null) {
+      const utilization = usage.utilization
+
+      if (utilization !== null) {
         for (const threshold of settings.notifications.thresholds) {
-          if (usage.utilization < threshold) continue
-          const dedupeKey = `${account.id}:${key}:${threshold}:${usage.resetsAt ?? 'none'}`
-          if (fired.has(dedupeKey)) continue
-          fired.add(dedupeKey)
-          intents.push({
-            kind: 'threshold',
-            accountId: account.id,
-            label: account.label,
-            window: key,
-            threshold,
-            utilization: usage.utilization,
-            resetsAt: usage.resetsAt,
-          })
+          // Klíč SMÍ obsahovat jen účet, okno a práh. Kdyby v něm byl resetsAt,
+          // notifikace by se odpálila při každém pollu: 5h okno je rolling,
+          // takže se jeho resets_at posouvá průběžně a klíč by byl pokaždé nový.
+          const dedupeKey = `${account.id}:${key}:${threshold}`
+
+          if (utilization >= threshold) {
+            if (fired.has(dedupeKey)) continue
+            fired.add(dedupeKey)
+            intents.push({
+              kind: 'threshold',
+              accountId: account.id,
+              label: account.label,
+              window: key,
+              threshold,
+              utilization,
+              resetsAt: usage.resetsAt,
+            })
+          } else if (utilization < threshold - HYSTERESIS) {
+            // Práh se znovu „natáhne" až po zřetelném poklesu, ne hned pod ním —
+            // jinak by kolísání kolem hranice notifikace opakovalo donekonečna.
+            fired.delete(dedupeKey)
+          }
         }
       }
 
@@ -86,14 +100,20 @@ export function evaluateNotifications(
       const before = prevById.get(account.id)
       const beforeUsage = key === '5h' ? before?.fiveHour : before?.sevenDay
       if (!beforeUsage?.resetsAt || !usage.resetsAt) continue
+
+      // Posun resetsAt sám o sobě reset NEDOKAZUJE — u rolling okna se posouvá
+      // pořád. Skutečný reset pozná až výrazný propad vyčerpání.
       const moved = Date.parse(usage.resetsAt) > Date.parse(beforeUsage.resetsAt)
-      if (moved && (beforeUsage.utilization ?? 0) >= 50) {
+      const previous = beforeUsage.utilization ?? 0
+      const dropped = utilization !== null && utilization <= previous / 2
+
+      if (moved && previous >= 50 && dropped) {
         intents.push({
           kind: 'reset',
           accountId: account.id,
           label: account.label,
           window: key,
-          previousUtilization: beforeUsage.utilization ?? 0,
+          previousUtilization: previous,
         })
       }
     }

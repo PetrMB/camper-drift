@@ -44,16 +44,49 @@ describe('evaluateNotifications', () => {
     expect(second).toHaveLength(0)
   })
 
-  it('po posunu resetsAt se práh může odpálit znovu', () => {
+  it('neopakuje notifikaci, když se u rolling okna jen posune resetsAt', () => {
+    // 5h okno je rolling: resets_at se posouvá při každém pollu. Dřív byl
+    // resetsAt součástí dedupe klíče, takže notifikace vyskakovala pořád dokola.
     const fired = new Set<string>()
-    const first = snapshot(account())
-    evaluateNotifications(null, first, defaultSettings(), fired, NOW)
+    let previous = snapshot(account())
+    expect(evaluateNotifications(null, previous, defaultSettings(), fired, NOW)).toHaveLength(1)
 
-    const later = snapshot(
-      account({ fiveHour: { utilization: 85, resetsAt: '2026-08-17T19:00:00.000Z', source: 'api' } }),
+    for (const minutes of [3, 6, 9, 12]) {
+      const shifted = snapshot(
+        account({
+          fiveHour: {
+            utilization: 85,
+            resetsAt: new Date(Date.parse('2026-08-17T14:00:00.000Z') + minutes * 60_000).toISOString(),
+            source: 'api',
+          },
+        }),
+      )
+      const intents = evaluateNotifications(previous, shifted, defaultSettings(), fired, NOW)
+      expect(intents).toHaveLength(0)
+      previous = shifted
+    }
+  })
+
+  it('práh se znovu natáhne až po zřetelném poklesu pod něj', () => {
+    const fired = new Set<string>()
+    const high = snapshot(account())
+    expect(evaluateNotifications(null, high, defaultSettings(), fired, NOW)).toHaveLength(1)
+
+    // Kolísání těsně pod prahem notifikaci neobnoví.
+    const wobble = snapshot(
+      account({ fiveHour: { utilization: 78, resetsAt: '2026-08-17T14:00:00.000Z', source: 'api' } }),
     )
-    const again = evaluateNotifications(first, later, defaultSettings(), fired, NOW)
-    expect(again.some((i) => i.kind === 'threshold')).toBe(true)
+    evaluateNotifications(high, wobble, defaultSettings(), fired, NOW)
+    expect(evaluateNotifications(wobble, high, defaultSettings(), fired, NOW)).toHaveLength(0)
+
+    // Zřetelný pokles ano.
+    const low = snapshot(
+      account({ fiveHour: { utilization: 20, resetsAt: '2026-08-17T14:00:00.000Z', source: 'api' } }),
+    )
+    evaluateNotifications(high, low, defaultSettings(), fired, NOW)
+    expect(
+      evaluateNotifications(low, high, defaultSettings(), fired, NOW).some((i) => i.kind === 'threshold'),
+    ).toBe(true)
   })
 
   it('z lokálního odhadu nenotifikuje nikdy', () => {
@@ -64,6 +97,18 @@ describe('evaluateNotifications', () => {
       }),
     )
     expect(evaluateNotifications(null, next, defaultSettings(), new Set(), NOW)).toHaveLength(0)
+  })
+
+  it('samotný posun resetsAt bez propadu vyčerpání není reset', () => {
+    // Rolling okno posouvá resets_at pořád — bez propadu to reset není.
+    const before = snapshot(
+      account({ fiveHour: { utilization: 74, resetsAt: '2026-08-17T13:00:00.000Z', source: 'api' } }),
+    )
+    const after = snapshot(
+      account({ fiveHour: { utilization: 76, resetsAt: '2026-08-17T13:03:00.000Z', source: 'api' } }),
+    )
+    const intents = evaluateNotifications(before, after, defaultSettings(), new Set(), NOW)
+    expect(intents.some((i) => i.kind === 'reset')).toBe(false)
   })
 
   it('reset se ohlásí jen když bylo předtím aspoň 50 %', () => {

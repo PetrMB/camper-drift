@@ -176,7 +176,9 @@ function render(snapshot: AppSnapshot): void {
   const parts: string[] = []
   parts.push(newest ? `Aktualizováno ${formatTimeOfDay(newest)}` : 'Zatím bez dat')
   if (snapshot.mock) parts.push('mock')
-  if (snapshot.unknownApiKeys.length) parts.push('API vrátilo neznámá pole')
+  // Neznámá pole z API jsou signál pro vývoj, ne pro uživatele — nedá se s tím
+  // nic udělat a v 300px širokém widgetu to jen ukrajuje místo.
+  // Konkrétní názvy klíčů zůstávají v diagnostice.
   statusText.textContent = parts.join(' · ')
   status.title = statusText.textContent
 
