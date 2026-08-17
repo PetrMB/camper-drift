@@ -1,0 +1,64 @@
+name: Release (Windows)
+
+on:
+  push:
+    tags: ["claudemonitor-v*"]
+  # Ruční spuštění funguje jen pro workflow na výchozí větvi; tady je hlavně
+  # pro případ, že by se projekt přesunul do vlastního repozitáře.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalace závislostí
+        run: npm ci
+
+      - name: Typecheck, testy a build
+        run: |
+          npm run typecheck
+          npm test
+          npx electron-vite build
+
+      - name: Sestavení instalátoru
+        # Bez podpisu — v repozitáři nejsou žádné podepisovací certifikáty.
+        run: npx electron-builder --win --publish never
+
+      - name: Výpis výsledků
+        run: Get-ChildItem release -File | Select-Object Name, Length
+        shell: pwsh
+
+      # Artefakt slouží jako záloha, když by publikace release neprošla.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClaudeMonitor-windows
+          path: |
+            release/*.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publikace release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          gh release create "$env:GITHUB_REF_NAME" (Get-ChildItem release/*.exe).FullName `
+            --title "ClaudeMonitor $env:GITHUB_REF_NAME" `
+            --notes "Widget na Windows plochu pro sledování limitů Claude účtů.
+
+          **setup.exe** — instalace do %LOCALAPPDATA%, bez práv správce, se zástupcem ve Start menu (podmínka pro toast notifikace).
+          **portable.exe** — spustí se odkudkoli, notifikace přes tray balloon.
+
+          Aplikace není podepsaná, takže při prvním spuštění vyskočí SmartScreen: *Další informace* -> *Přesto spustit*." `
+            --target "$env:GITHUB_SHA"
