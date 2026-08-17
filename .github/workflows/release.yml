@@ -2,9 +2,11 @@ name: Release (Windows)
 
 on:
   push:
-    tags: ["claudemonitor-v*"]
+    branches: ["claude/claude-credit-monitor-dashboard-vjmzxk"]
+    # Změny čistě v dokumentaci nemá smysl přebalovat.
+    paths-ignore: ["README.md", "NOTICE", "LICENSE", "build/preview-*.png"]
   # Ruční spuštění funguje jen pro workflow na výchozí větvi; tady je hlavně
-  # pro případ, že by se projekt přesunul do vlastního repozitáře.
+  # pro případ, že se projekt přesune do vlastního repozitáře.
   workflow_dispatch:
 
 permissions:
@@ -47,18 +49,32 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # Tag i release zakládá workflow sám přes GITHUB_TOKEN — push tagu zvenčí
+      # nemusí být povolený, tohle na tom nezávisí.
       - name: Publikace release
-        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          gh release create "$env:GITHUB_REF_NAME" (Get-ChildItem release/*.exe).FullName `
-            --title "ClaudeMonitor $env:GITHUB_REF_NAME" `
-            --notes "Widget na Windows plochu pro sledování limitů Claude účtů.
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $tag = "claudemonitor-v$version"
 
-          **setup.exe** — instalace do %LOCALAPPDATA%, bez práv správce, se zástupcem ve Start menu (podmínka pro toast notifikace).
-          **portable.exe** — spustí se odkudkoli, notifikace přes tray balloon.
+          $notes = @"
+          Widget na Windows plochu pro sledování limitů Claude účtů.
 
-          Aplikace není podepsaná, takže při prvním spuštění vyskočí SmartScreen: *Další informace* -> *Přesto spustit*." `
-            --target "$env:GITHUB_SHA"
+          - **setup.exe** — instalace do %LOCALAPPDATA%, bez práv správce, se zástupcem
+            ve Start menu (podmínka pro funkční toast notifikace).
+          - **portable.exe** — spustí se odkudkoli, notifikace přes tray balloon.
+
+          Aplikace není podepsaná, takže při prvním spuštění vyskočí SmartScreen:
+          *Další informace* -> *Přesto spustit*.
+
+          Sestaveno z commitu $env:GITHUB_SHA.
+          "@
+
+          # Předchozí release stejné verze nahradíme, ať odkaz zůstává stabilní.
+          gh release delete $tag --yes --cleanup-tag 2>$null
+          gh release create $tag (Get-ChildItem release/*.exe).FullName `
+            --title "ClaudeMonitor $version" `
+            --notes $notes `
+            --target $env:GITHUB_SHA
