@@ -37,123 +37,32 @@ takové číslo vždy označí jako odhad — nebo se neukáže vůbec.
 
 ## Instalace
 
-Zatím není publikovaný žádný release — instaluje se sestavením ze zdrojáků
-na Windows stroji. Potřebuješ **Node.js 22.12+** a git.
+Stáhni hotový instalátor z **[Releases](https://github.com/PetrMB/camper-drift/releases/tag/claudemonitor-v0.1.0)**
+— nic dalšího na svém stroji nepotřebuješ (ani Node.js).
 
-### 0. Node.js bez práv správce
-
-Ověř, jestli ho už nemáš:
-
-```powershell
-where.exe node ; where.exe npm
-```
-
-Když `npm` není k nalezení, rozbal si Node portable do svého profilu —
-žádný instalátor, žádná práva správce:
-
-```powershell
-$dist = "https://nodejs.org/dist/latest-v22.x/"
-
-# Název souboru se čte ze SHASUMS256.txt, ne z HTML výpisu adresáře —
-# ten se za firemní proxy často vrátí přepsaný a parsování odkazů selže.
-$sums = (Invoke-WebRequest -UseBasicParsing ($dist + "SHASUMS256.txt")).Content
-$file = [regex]::Match($sums, 'node-v22\.[\d.]+-win-x64\.zip').Value
-if (-not $file) { throw "Nepodařilo se zjistit název archivu. Vypiš `$sums a podívej se, co server vrátil." }
-"Stahuji $file"
-
-$zip = "$env:USERPROFILE\Downloads\$file"
-Invoke-WebRequest -UseBasicParsing ($dist + $file) -OutFile $zip
-Expand-Archive $zip -DestinationPath "$env:LOCALAPPDATA\node" -Force
-
-$nodeDir = (Get-ChildItem "$env:LOCALAPPDATA\node" -Directory | Select-Object -First 1).FullName
-if (-not $nodeDir) { throw "Rozbalení neproběhlo — zkontroluj $env:LOCALAPPDATA\node." }
-$env:Path = "$nodeDir;$env:Path"
-node -v ; npm -v
-```
-
-Aby PATH přežil restart konzole (zapisuje se do uživatelské větve registru,
-nic systémového):
-
-```powershell
-[Environment]::SetEnvironmentVariable(
-  "Path", "$nodeDir;" + [Environment]::GetEnvironmentVariable("Path","User"), "User")
-```
-
-`Invoke-WebRequest` používá systémové úložiště certifikátů Windows, takže
-za Zscalerem funguje bez konfigurace.
-
-### 1. Získej kód
-
-```powershell
-git clone --single-branch -b claude/claude-credit-monitor-dashboard-vjmzxk `
-  https://github.com/PetrMB/camper-drift ClaudeMonitor
-cd ClaudeMonitor
-```
-
-`--single-branch` je podstatné: větev má vlastní kořen historie, takže se
-naklonuje jen ClaudeMonitor, nic jiného z toho repozitáře.
-
-### 2. Nainstaluj závislosti
-
-```powershell
-npm install
-```
-
-> **V korporátní síti pozor:** `npm install` a stahování binárky Electronu jedou
-> přes **Node**, ne přes Chromium — takže na ně `NODE_EXTRA_CA_CERTS` **vliv má**
-> (na běh samotné aplikace ne, viz sekce o Zscaleru níž). Když instalace spadne
-> na certifikátu nebo proxy:
->
-> ```powershell
-> $env:NODE_EXTRA_CA_CERTS = "C:\cesta\k\zscaler-root.pem"   # stejný PEM jako pro Claude Code
-> $env:ELECTRON_GET_USE_PROXY = "true"
-> $env:GLOBAL_AGENT_HTTPS_PROXY = $env:HTTPS_PROXY
-> npm install
-> ```
->
-> Nikdy nevypínej `strict-ssl` v npm — správná cesta je doplnit CA.
-
-### 3. Ověř prostředí, než něco sestavíš
-
-```powershell
-npm run probe
-```
-
-Udělá **jeden** headless dotaz na API a vypíše stav credentials, použitý
-User-Agent, HTTP status, rozparsovanou odpověď a zvolený režim certifikátů.
-Token nikdy nevypisuje. Tímhle si potvrdíš, že Zscaler, User-Agent i beta
-hlavička fungují — teprve pak má smysl řešit zbytek.
-
-Když probe projde, můžeš si widget rovnou pustit bez instalace:
-
-```powershell
-npm run dev
-```
-
-### 4. Sestav instalátor
-
-```powershell
-npm run release:win
-```
-
-Ve složce `release\` vzniknou dva soubory:
-
-- **`ClaudeMonitor-0.1.0-setup.exe`** — doporučeno. Instaluje se do
-  `%LOCALAPPDATA%\Programs\ClaudeMonitor`, **nevyžaduje práva správce**, a založí
-  zástupce ve Start menu, což je na Windows podmínka pro funkční toast notifikace.
-- **`ClaudeMonitor-0.1.0-portable.exe`** — spustí se odkudkoli bez instalace.
-  Notifikace v tomhle režimu chodí přes tray balloon místo systémových toastů.
+- **[`ClaudeMonitor-0.1.0-setup.exe`](https://github.com/PetrMB/camper-drift/releases/download/claudemonitor-v0.1.0/ClaudeMonitor-0.1.0-setup.exe)**
+  — doporučeno. Instaluje se do `%LOCALAPPDATA%\Programs\ClaudeMonitor`,
+  **nevyžaduje práva správce**, a založí zástupce ve Start menu, což je na
+  Windows podmínka pro funkční toast notifikace.
+- **[`ClaudeMonitor-0.1.0-portable.exe`](https://github.com/PetrMB/camper-drift/releases/download/claudemonitor-v0.1.0/ClaudeMonitor-0.1.0-portable.exe)**
+  — spustí se odkudkoli bez instalace. Notifikace v tomhle režimu chodí přes
+  tray balloon místo systémových toastů.
 
 Aplikace není podepsaná certifikátem, takže při prvním spuštění vyskočí
 SmartScreen → *Další informace* → *Přesto spustit*. (Podepsat ji vlastním
-self-signed certifikátem by varování jen zhoršilo.)
+self-signed certifikátem by varování jen zhoršilo.) Buildy sestavuje
+GitHub Actions na `windows-latest` — viz `.github/workflows/release.yml`.
 
-### 5. První spuštění
+### První spuštění
 
 Widget si sám najde `%USERPROFILE%\.claude`, založí z něj účet a naskočí
 v pravém horním rohu plochy. Přetáhni ho, kam chceš — pozici si pamatuje.
 Autostart zapneš v menu tray ikony („Spouštět s Windows", zapisuje do `HKCU`,
 bez práv správce). Druhý účet přidáš podle sekce níž.
+
+Pokud dotazy na API nefungují, spusť diagnostiku z menu tray ikony
+(*Nastavení → Kopírovat diagnostiku*) — vypíše stav credentials, zvolený režim
+certifikátů a poslední chybu. Token nikdy neobsahuje.
 
 ## Dva účty
 
@@ -208,14 +117,36 @@ kontrola redakce tokenu).
 
 ## Vývoj
 
-```bash
+Pro běžné používání není potřeba — stačí stáhnout `.exe` z Releases.
+Tohle je jen pro úpravy kódu. Potřebuješ **Node.js 22.12+**.
+
+```powershell
+git clone --single-branch -b claude/claude-credit-monitor-dashboard-vjmzxk `
+  https://github.com/PetrMB/camper-drift ClaudeMonitor
+cd ClaudeMonitor
 npm install
+```
+
+`--single-branch` je podstatné: větev má vlastní kořen historie, takže se
+naklonuje jen ClaudeMonitor.
+
+```bash
 npm run dev              # živý widget
 npm run dev:mock         # mock data, bez účtu a bez sítě
 npm test                 # unit testy
 npm run typecheck
 npm run release:win      # portable + NSIS build
 ```
+
+> **V korporátní síti pozor:** `npm install` a stahování binárky Electronu jedou
+> přes **Node**, ne přes Chromium — takže na ně `NODE_EXTRA_CA_CERTS` **vliv má**
+> (na běh hotové aplikace ne, viz sekce o Zscaleru). Když instalace spadne na
+> certifikátu, nastav ho na stejný PEM, jaký používáš pro Claude Code, a přidej
+> `ELECTRON_GET_USE_PROXY=true`. Nikdy nevypínej `strict-ssl` v npm.
+>
+> Node.js jde nainstalovat bez práv správce rozbalením oficiálního ZIPu
+> z <https://nodejs.org/dist/latest-v22.x/> do `%LOCALAPPDATA%` a přidáním
+> do uživatelského PATH.
 
 ### Probe — ověření prostředí bez UI
 
