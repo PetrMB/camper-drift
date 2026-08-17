@@ -40,6 +40,40 @@ takové číslo vždy označí jako odhad — nebo se neukáže vůbec.
 Zatím není publikovaný žádný release — instaluje se sestavením ze zdrojáků
 na Windows stroji. Potřebuješ **Node.js 22.12+** a git.
 
+### 0. Node.js bez práv správce
+
+Ověř, jestli ho už nemáš:
+
+```powershell
+where.exe node ; where.exe npm
+```
+
+Když `npm` není k nalezení, rozbal si Node portable do svého profilu —
+žádný instalátor, žádná práva správce:
+
+```powershell
+$dist   = "https://nodejs.org/dist/latest-v22.x/"
+$file   = (Invoke-WebRequest -UseBasicParsing $dist).Links.href |
+          Where-Object { $_ -match '^node-v22\..*-win-x64\.zip$' } | Select-Object -First 1
+Invoke-WebRequest -UseBasicParsing ($dist + $file) -OutFile "$env:TEMP\$file"
+Expand-Archive "$env:TEMP\$file" -DestinationPath "$env:LOCALAPPDATA\node" -Force
+
+$nodeDir = (Get-ChildItem "$env:LOCALAPPDATA\node" -Directory | Select-Object -First 1).FullName
+$env:Path = "$nodeDir;$env:Path"
+node -v ; npm -v
+```
+
+Aby PATH přežil restart konzole (zapisuje se do uživatelské větve registru,
+nic systémového):
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+  "Path", "$nodeDir;" + [Environment]::GetEnvironmentVariable("Path","User"), "User")
+```
+
+`Invoke-WebRequest` používá systémové úložiště certifikátů Windows, takže
+za Zscalerem funguje bez konfigurace.
+
 ### 1. Získej kód
 
 ```powershell
