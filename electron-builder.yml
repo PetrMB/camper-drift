@@ -1,0 +1,33 @@
+appId: com.petrmb.claudemonitor
+productName: ClaudeMonitor
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+extraResources:
+  - from: build
+    to: build
+    filter:
+      - "*.ico"
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  icon: build/icon.ico
+nsis:
+  oneClick: true
+  # per-user instalace do %LOCALAPPDATA% — nevyžaduje admin práva
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: true
+  # Zástupce ve Start menu je PODMÍNKA pro Windows toast notifikace
+  createStartMenuShortcut: true
+  shortcutName: ClaudeMonitor
+  artifactName: ClaudeMonitor-${version}-setup.exe
+portable:
+  artifactName: ClaudeMonitor-${version}-portable.exe
+  unpackDirName: ClaudeMonitor

@@ -1,0 +1,33 @@
+{
+  "name": "claude-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Windows desktop widget pro sledování využití Claude účtů a času obnovení limitů",
+  "author": "PetrMB",
+  "license": "MIT",
+  "main": "./out/main/index.js",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "electron-vite dev --watch",
+    "dev:mock": "cross-env CLAUDEMONITOR_MOCK=1 electron-vite dev --watch",
+    "probe": "cross-env CLAUDEMONITOR_PROBE=1 electron-vite dev",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "vitest run",
+    "build": "npm run typecheck && electron-vite build",
+    "pack:dir": "npm run build && electron-builder --dir",
+    "release:win": "npm run build && electron-builder --win --publish never"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "cross-env": "^7.0.3",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "playwright": "^1.62.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.7"
+  }
+}

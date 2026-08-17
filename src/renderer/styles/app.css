@@ -1,0 +1,499 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+}
+
+body {
+  font-family: var(--cm-font);
+  color: var(--cm-text);
+  /* Sentence case a zarovnání vlevo jsou default celé aplikace. */
+  text-align: left;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  height: 100%;
+  padding: 6px; /* prostor pro stín, aby ho okno neuřízlo */
+}
+
+/* ── Karta ─────────────────────────────────────────────────────────────── */
+
+.card {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--cm-surface);
+  border-radius: var(--cm-radius-l);
+  box-shadow: var(--cm-shadow);
+  overflow: hidden;
+}
+
+/*
+ * ŠKODA facet: jeden plochý polygon v rohu, úhel 22° (povolený rozsah 10–35°,
+ * s odstupem od 0/45/90°). Bez stínu, bez průhlednosti.
+ *
+ * Sedí v pravém DOLNÍM rohu — nahoře by kolidoval s ovládacími tlačítky
+ * a text přes hranu facetu je podle CI zakázaný.
+ */
+.facet {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 76px;
+  height: 32px;
+  background: var(--cm-facet);
+  /* 32 / 76 ≈ tan 22,8° */
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  pointer-events: none;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-space-2);
+  height: 28px;
+  padding: 0 var(--cm-space-3);
+  flex: 0 0 auto;
+  -webkit-app-region: drag;
+}
+
+.header .title {
+  color: var(--cm-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header .spacer {
+  flex: 1;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cm-account-accent, var(--cm-accent));
+  flex: 0 0 auto;
+}
+
+.iconbtn {
+  -webkit-app-region: no-drag;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--cm-radius-s);
+  background: transparent;
+  color: var(--cm-text-muted);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--cm-dur) var(--cm-ease-tech),
+    background var(--cm-dur) var(--cm-ease-tech);
+}
+
+.iconbtn:hover {
+  color: var(--cm-text);
+  background: var(--cm-surface-alt);
+}
+
+.iconbtn:focus-visible {
+  outline: 2px solid var(--cm-accent);
+  outline-offset: 1px;
+}
+
+.iconbtn.shake {
+  animation: shake 320ms var(--cm-ease-tech);
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden auto;
+  padding: 0 var(--cm-space-3) var(--cm-space-2);
+}
+
+/* ── Řádek účtu ────────────────────────────────────────────────────────── */
+
+.account {
+  padding: var(--cm-space-2) 0;
+}
+
+.account + .account {
+  border-top: 1px solid var(--cm-border);
+}
+
+.account.soonest {
+  background: var(--cm-surface-alt);
+  border-radius: var(--cm-radius-m);
+  padding-left: var(--cm-space-2);
+  padding-right: var(--cm-space-2);
+}
+
+.account-head {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-space-2);
+  margin-bottom: var(--cm-space-1);
+}
+
+.account-head .label {
+  color: var(--cm-text);
+}
+
+body[data-layout="single"] .account-head {
+  display: none; /* u jediného účtu nese jméno hlavička okna */
+}
+
+.primary {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-space-3);
+}
+
+.countdown-block {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Čas do resetu je největší prvek kompozice — to je celý smysl widgetu. */
+.countdown {
+  color: var(--cm-text);
+  white-space: nowrap;
+}
+
+/* Popisek okna a absolutní čas resetu sdílí jeden řádek, ať karta zůstane nízká. */
+.reset-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cm-space-1);
+  color: var(--cm-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Bar ───────────────────────────────────────────────────────────────── */
+
+.bar {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--cm-track);
+  overflow: hidden;
+}
+
+.bar.thick {
+  height: 10px;
+  border-radius: 5px;
+}
+
+.bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--cm-bar-color, var(--cm-accent));
+  transition: width var(--cm-dur-slow) var(--cm-ease-natural),
+    background var(--cm-dur) var(--cm-ease-natural);
+}
+
+.row-7d {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-space-2);
+  margin-top: var(--cm-space-2);
+}
+
+.row-7d .bar {
+  flex: 1;
+  min-width: 40px;
+}
+
+.row-7d .meta {
+  color: var(--cm-text-muted);
+  white-space: nowrap;
+}
+
+/* ── Prstenec ──────────────────────────────────────────────────────────── */
+
+.ring {
+  flex: 0 0 auto;
+  display: block;
+}
+
+.ring .track {
+  fill: none;
+  stroke: var(--cm-track);
+}
+
+.ring .value {
+  fill: none;
+  stroke: var(--cm-ring-color, var(--cm-accent));
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dashoffset var(--cm-dur-slow) var(--cm-ease-natural),
+    stroke var(--cm-dur) var(--cm-ease-natural);
+}
+
+.ring .pct {
+  fill: var(--cm-text);
+  text-anchor: middle;
+  dominant-baseline: central;
+  font-family: var(--cm-font);
+  font-weight: 600;
+}
+
+/* ── Stav / patička ────────────────────────────────────────────────────── */
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-space-2);
+  /* Vpravo místo pro facet, aby přes něj nikdy nepřetekl text. */
+  padding: var(--cm-space-1) 84px var(--cm-space-2) var(--cm-space-3);
+  color: var(--cm-text-muted);
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.status .status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status .chip {
+  flex: 0 0 auto;
+}
+
+.staleness {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cm-staleness-color, var(--cm-accent));
+  flex: 0 0 auto;
+}
+
+.chip {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--cm-border);
+  color: var(--cm-text-muted);
+}
+
+.detail {
+  color: var(--cm-text-muted);
+  margin-top: var(--cm-space-1);
+  /* Hláška se smí zalomit do dvou řádků — okno na to má vyhrazenou výšku. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.detail.alert {
+  color: var(--cm-red);
+}
+
+/* ── Rozšířené zobrazení ───────────────────────────────────────────────── */
+
+.section {
+  margin-top: var(--cm-space-3);
+}
+
+.section-title {
+  color: var(--cm-text-muted);
+  margin-bottom: var(--cm-space-1);
+}
+
+.kv {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--cm-space-2);
+  color: var(--cm-text-muted);
+}
+
+.kv strong {
+  color: var(--cm-text);
+  font-weight: 600;
+}
+
+/* ── Nastavení ─────────────────────────────────────────────────────────── */
+
+.settings {
+  padding: var(--cm-space-2) var(--cm-space-3) var(--cm-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-space-3);
+}
+
+.settings h2 {
+  color: var(--cm-text);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-space-1);
+}
+
+.field label {
+  color: var(--cm-text-muted);
+}
+
+.field input[type="text"] {
+  -webkit-app-region: no-drag;
+  background: var(--cm-surface-alt);
+  border: 1px solid var(--cm-border);
+  border-radius: var(--cm-radius-s);
+  color: var(--cm-text);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 6px 8px;
+}
+
+.field input[type="text"]:focus-visible {
+  outline: 2px solid var(--cm-accent);
+  outline-offset: 1px;
+}
+
+.checkline {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-space-2);
+  color: var(--cm-text-muted);
+}
+
+.checkline input {
+  -webkit-app-region: no-drag;
+  accent-color: var(--cm-accent);
+}
+
+.btn {
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--cm-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cm-text);
+  font-family: inherit;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background var(--cm-dur) var(--cm-ease-tech);
+}
+
+.btn:hover {
+  background: var(--cm-surface-alt);
+}
+
+.btn.primary {
+  background: var(--cm-accent);
+  border-color: var(--cm-accent);
+  /* Na Emeraldu je Electric výplň se tmavým textem — signature dvojice. */
+  color: var(--cm-emerald);
+}
+
+:root[data-theme="light"] .btn.primary {
+  color: var(--cm-white);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--cm-accent);
+  outline-offset: 2px;
+}
+
+.btnrow {
+  display: flex;
+  gap: var(--cm-space-2);
+  flex-wrap: wrap;
+}
+
+.account-row {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-space-2);
+  padding: var(--cm-space-2) 0;
+  border-top: 1px solid var(--cm-border);
+}
+
+.account-row .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.muted {
+  color: var(--cm-text-muted);
+}
+
+.suggestion {
+  border: 1px solid var(--cm-border);
+  border-radius: var(--cm-radius-m);
+  padding: var(--cm-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-space-1);
+}
+
+.toast {
+  position: absolute;
+  left: var(--cm-space-3);
+  right: var(--cm-space-3);
+  bottom: var(--cm-space-3);
+  padding: var(--cm-space-2) var(--cm-space-3);
+  border-radius: var(--cm-radius-m);
+  background: var(--cm-surface-alt);
+  border: 1px solid var(--cm-border);
+  color: var(--cm-text);
+  animation: fade-in var(--cm-dur) var(--cm-ease-tech);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.u-center {
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+  }
+}

@@ -1,0 +1,100 @@
+/*
+ * Typografické varianty Flow jako utility třídy.
+ * Hodnoty odpovídají Flow škále; při přístupu ke Storybooku je vhodné je doladit.
+ *
+ * Font SKODA Next je licencovaný a v repu NENÍ. Načte se buď z systému
+ * (local()), nebo z uživatelské složky přes protokol cmfont://. Bez něj
+ * padáme na Segoe UI a layout je navržený tak, aby to přežil.
+ */
+@font-face {
+  font-family: "SKODA Next";
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src:
+    local("SKODA Next"),
+    local("SKODA Next Regular"),
+    url("cmfont://SKODANext-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "SKODA Next";
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+  src:
+    local("SKODA Next Light"),
+    url("cmfont://SKODANext-Light.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "SKODA Next";
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  src:
+    local("SKODA Next Bold"),
+    url("cmfont://SKODANext-Bold.woff2") format("woff2");
+}
+
+.t-h1 {
+  font-size: 40px;
+  line-height: 48px;
+  font-weight: 600;
+}
+.t-h2 {
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 600;
+}
+.t-h3 {
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 600;
+}
+.t-h4 {
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
+}
+.t-subheadline {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+}
+.t-subtitle1 {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+.t-subtitle2 {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+.t-body {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+}
+.t-caption1 {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+}
+.t-caption2 {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+}
+.t-disclaimer {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 400;
+}
+.t-button {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}

@@ -1,0 +1,11 @@
+node_modules/
+out/
+release/
+dist/
+*.log
+.DS_Store
+.vite/
+
+# Licencované fonty se nikdy necommitují
+resources/fonts/*
+!resources/fonts/README.md

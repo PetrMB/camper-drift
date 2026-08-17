@@ -1,0 +1,96 @@
+/*
+ * ŠKODA Flow / CI tokeny.
+ *
+ * Pravidla, která nesmí spadnout pod stůl:
+ *  - Primární zeleně vedou kompozici. Emerald je plocha, Electric je akcent.
+ *  - Electric Green NIKDY jako barva textu na světlém podkladu (kontrast ~1,6:1).
+ *    Na Emeraldu je to naopak signature dvojice a je v pořádku.
+ *  - Terciární barvy jen bodově a MAX JEDNA v celé kompozici — hlídá
+ *    pickComposition() v state.ts, ne disciplína.
+ *  - Sentence case, zarovnání vlevo nebo na střed. Nikdy vpravo, nikdy do bloku.
+ */
+:root {
+  /* primární */
+  --cm-emerald: #0e3a2f;
+  --cm-electric: #78faae;
+
+  /* neutrály */
+  --cm-black: #000000;
+  --cm-dark-grey: #394748;
+  --cm-stone-grey: #6f797a;
+  --cm-steel-grey: #a0a7a8;
+  --cm-medium-grey: #cacecf;
+  --cm-cloud-grey: #e3e5e6;
+  --cm-light-grey: #f1f2f2;
+  --cm-white: #ffffff;
+
+  /* terciární — spot use only */
+  --cm-red: #f15252;
+  --cm-blue: #0961a1;
+  --cm-teal: #1ed4df;
+  --cm-yellow: #faeb67;
+  --cm-orange: #f7b046;
+
+  /* sémantické */
+  --cm-surface: var(--cm-emerald);
+  --cm-surface-alt: rgba(255, 255, 255, 0.06);
+  --cm-text: var(--cm-white);
+  --cm-text-muted: var(--cm-steel-grey);
+  --cm-accent: var(--cm-electric);
+  --cm-track: rgba(255, 255, 255, 0.14);
+  --cm-border: rgba(255, 255, 255, 0.12);
+  --cm-facet: var(--cm-electric);
+
+  /* spacing / tvarosloví */
+  --cm-space-1: 4px;
+  --cm-space-2: 8px;
+  --cm-space-3: 12px;
+  --cm-space-4: 16px;
+  --cm-space-5: 24px;
+  --cm-space-6: 32px;
+  --cm-radius-s: 8px;
+  --cm-radius-m: 12px;
+  --cm-radius-l: 16px;
+  --cm-shadow: 0 8px 28px rgba(0, 0, 0, 0.38);
+
+  --cm-font: "SKODA Next", -apple-system, "Segoe UI", system-ui, sans-serif;
+
+  /* motion curves ze ŠKODA CI */
+  --cm-ease-natural: cubic-bezier(0.3, 0, 0.1, 1); /* prstence, bary, facet */
+  --cm-ease-tech: cubic-bezier(0.6, 0, 0.4, 1); /* typografie */
+  --cm-dur: 160ms;
+  --cm-dur-slow: 400ms;
+}
+
+/*
+ * Světlá varianta: Emerald se stává akcentem a Electric přežívá výhradně
+ * jako výplň (--cm-fill-accent), nikdy jako `color`.
+ */
+:root[data-theme="light"] {
+  --cm-surface: var(--cm-white);
+  --cm-surface-alt: var(--cm-light-grey);
+  --cm-text: var(--cm-dark-grey);
+  --cm-text-muted: var(--cm-stone-grey);
+  --cm-accent: var(--cm-emerald);
+  --cm-track: var(--cm-cloud-grey);
+  --cm-border: var(--cm-medium-grey);
+  --cm-facet: var(--cm-emerald);
+  --cm-shadow: 0 8px 24px rgba(14, 58, 47, 0.18);
+}
+
+/* Akcenty účtů. V multi režimu odlišují karty; drží se palety. */
+.accent-electric {
+  --cm-account-accent: var(--cm-electric);
+}
+.accent-teal {
+  --cm-account-accent: var(--cm-teal);
+}
+.accent-yellow {
+  --cm-account-accent: var(--cm-yellow);
+}
+.accent-orange {
+  --cm-account-accent: var(--cm-orange);
+}
+.accent-blue {
+  --cm-account-accent: var(--cm-blue);
+}

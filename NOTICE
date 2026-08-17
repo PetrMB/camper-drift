@@ -1,0 +1,33 @@
+ClaudeMonitor — poznámky k obsahu a závislostem
+================================================
+
+Neoficiální nástroj
+-------------------
+ClaudeMonitor je osobní nástroj. Není nijak spojený se společností Anthropic
+ani se ŠKODA AUTO a. s. a není žádnou z nich podporovaný ani schvalovaný.
+
+Nedokumentované API
+-------------------
+Aplikace čte endpoint https://api.anthropic.com/api/oauth/usage, který Anthropic
+nedokumentuje. Může se kdykoli změnit nebo přestat existovat. Aplikace je na to
+připravená (tolerantní parser + lokální záloha), ale spolehlivost tohoto zdroje
+není nijak garantovaná.
+
+Font SKODA Next
+---------------
+Korporátní font SKODA Next je licencovaný a v tomto repozitáři NENÍ obsažený
+ani distribuovaný. Aplikace ho použije pouze tehdy, když je nainstalovaný
+v systému, nebo když uživatel v nastavení ukáže na vlastní legálně získanou
+kopii. Bez něj se použije systémový Segoe UI.
+
+Barvy ŠKODA CI
+--------------
+Hexadecimální hodnoty barev z ŠKODA Corporate Identity jsou v kódu použité pro
+osobní interní nástroj. Nejde o distribuci značkových materiálů; logo ani
+wordmark ŠKODA aplikace neobsahuje.
+
+Ochranné známky
+---------------
+Claude a Anthropic jsou ochranné známky společnosti Anthropic PBC.
+ŠKODA je ochranná známka společnosti ŠKODA AUTO a. s.
+Použití názvů slouží pouze k identifikaci.
