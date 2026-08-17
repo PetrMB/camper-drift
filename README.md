@@ -37,17 +37,81 @@ takové číslo vždy označí jako odhad — nebo se neukáže vůbec.
 
 ## Instalace
 
-Stáhni z Releases:
+Zatím není publikovaný žádný release — instaluje se sestavením ze zdrojáků
+na Windows stroji. Potřebuješ **Node.js 22.12+** a git.
 
-- **`ClaudeMonitor-x.y.z-setup.exe`** — doporučeno. Instaluje se do
-  `%LOCALAPPDATA%`, **nevyžaduje práva správce**, a založí zástupce ve Start
-  menu, což je na Windows podmínka pro funkční notifikace.
-- **`ClaudeMonitor-x.y.z-portable.exe`** — spustí se odkudkoli bez instalace.
+### 1. Získej kód
+
+```powershell
+git clone --single-branch -b claude/claude-credit-monitor-dashboard-vjmzxk `
+  https://github.com/PetrMB/camper-drift ClaudeMonitor
+cd ClaudeMonitor
+```
+
+`--single-branch` je podstatné: větev má vlastní kořen historie, takže se
+naklonuje jen ClaudeMonitor, nic jiného z toho repozitáře.
+
+### 2. Nainstaluj závislosti
+
+```powershell
+npm install
+```
+
+> **V korporátní síti pozor:** `npm install` a stahování binárky Electronu jedou
+> přes **Node**, ne přes Chromium — takže na ně `NODE_EXTRA_CA_CERTS` **vliv má**
+> (na běh samotné aplikace ne, viz sekce o Zscaleru níž). Když instalace spadne
+> na certifikátu nebo proxy:
+>
+> ```powershell
+> $env:NODE_EXTRA_CA_CERTS = "C:\cesta\k\zscaler-root.pem"   # stejný PEM jako pro Claude Code
+> $env:ELECTRON_GET_USE_PROXY = "true"
+> $env:GLOBAL_AGENT_HTTPS_PROXY = $env:HTTPS_PROXY
+> npm install
+> ```
+>
+> Nikdy nevypínej `strict-ssl` v npm — správná cesta je doplnit CA.
+
+### 3. Ověř prostředí, než něco sestavíš
+
+```powershell
+npm run probe
+```
+
+Udělá **jeden** headless dotaz na API a vypíše stav credentials, použitý
+User-Agent, HTTP status, rozparsovanou odpověď a zvolený režim certifikátů.
+Token nikdy nevypisuje. Tímhle si potvrdíš, že Zscaler, User-Agent i beta
+hlavička fungují — teprve pak má smysl řešit zbytek.
+
+Když probe projde, můžeš si widget rovnou pustit bez instalace:
+
+```powershell
+npm run dev
+```
+
+### 4. Sestav instalátor
+
+```powershell
+npm run release:win
+```
+
+Ve složce `release\` vzniknou dva soubory:
+
+- **`ClaudeMonitor-0.1.0-setup.exe`** — doporučeno. Instaluje se do
+  `%LOCALAPPDATA%\Programs\ClaudeMonitor`, **nevyžaduje práva správce**, a založí
+  zástupce ve Start menu, což je na Windows podmínka pro funkční toast notifikace.
+- **`ClaudeMonitor-0.1.0-portable.exe`** — spustí se odkudkoli bez instalace.
   Notifikace v tomhle režimu chodí přes tray balloon místo systémových toastů.
 
 Aplikace není podepsaná certifikátem, takže při prvním spuštění vyskočí
 SmartScreen → *Další informace* → *Přesto spustit*. (Podepsat ji vlastním
 self-signed certifikátem by varování jen zhoršilo.)
+
+### 5. První spuštění
+
+Widget si sám najde `%USERPROFILE%\.claude`, založí z něj účet a naskočí
+v pravém horním rohu plochy. Přetáhni ho, kam chceš — pozici si pamatuje.
+Autostart zapneš v menu tray ikony („Spouštět s Windows", zapisuje do `HKCU`,
+bez práv správce). Druhý účet přidáš podle sekce níž.
 
 ## Dva účty
 
