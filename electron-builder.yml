@@ -3,6 +3,10 @@ productName: ClaudeMonitor
 directories:
   output: release
   buildResources: build
+# LZMA na maximum — build je pomalejší, výsledný .exe menší.
+compression: maximum
+# Vyhazuje nepoužité jazykové .pak soubory a licenční texty Chromia.
+afterPack: build/afterPack.js
 files:
   - out/**
   - package.json
