@@ -27,6 +27,7 @@ import { IS_MOCK } from './data/usageApi'
 import { handleFontScheme, registerFontScheme } from './fontProtocol'
 import { evaluateNotifications, fire, loadFired, saveFired } from './notify'
 import { pushSnapshot, registerIpc } from './ipcRouter'
+import { enableSerial } from './serialPermissions'
 import { createTray, getTray, rebuildMenu, setStartWithWindows, updateTray } from './tray'
 import { applyMode, createWindow, getWindow } from './windowManager'
 import { readCredentials } from './data/credentials'
@@ -252,6 +253,7 @@ async function bootstrap(): Promise<void> {
     process.env.ELECTRON_RENDERER_URL ?? null,
   )
   applyMode(getSettings().window.mode)
+  enableSerial(win)
 
   poller = new UsagePoller({
     accounts: () => getSettings().accounts,

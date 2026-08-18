@@ -7,6 +7,7 @@ import { formatTimeOfDay } from '../shared/time'
 import { hueColor, pickComposition, soonestAccountId } from './state'
 import { createAccountCard, type AccountCard } from './components/accountCard'
 import { createSettingsView } from './components/settings'
+import { SerialLink } from './serialLink'
 
 const root = document.getElementById('root') as HTMLElement
 
@@ -57,6 +58,16 @@ root.append(card)
 
 const settingsView = createSettingsView(() => {
   void refreshState()
+})
+
+/**
+ * Volitelné propojení s ESP32 displejem. Když není připojený, nic nedělá
+ * a widget se chová přesně jako dřív. Deklarace až za settingsView, aby
+ * callback nesahal na proměnnou v dočasné mrtvé zóně.
+ */
+export const serialLink = new SerialLink((status, message) => {
+  if (status === 'error' && message) showToast({ level: 'warn', message: `Displej: ${message}` })
+  void settingsView.refresh()
 })
 
 const cards = new Map<string, AccountCard>()
@@ -182,6 +193,7 @@ function render(snapshot: AppSnapshot): void {
   statusText.textContent = parts.join(' · ')
   status.title = statusText.textContent
 
+  void serialLink.send(snapshot)
   scheduleHeightReport()
 }
 
@@ -267,3 +279,6 @@ window.claudeMonitor.onModeChange(applyMode)
 
 void refreshState()
 startTicker()
+
+// Dřív povolený port se otevře bez dialogu; když žádný není, nic se nestane.
+void serialLink.reconnect()

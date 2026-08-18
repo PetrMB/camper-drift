@@ -4,7 +4,8 @@ on:
   push:
     branches: ["claude/claude-credit-monitor-dashboard-vjmzxk"]
     # Změny čistě v dokumentaci nemá smysl přebalovat.
-    paths-ignore: ["README.md", "NOTICE", "LICENSE", "build/preview-*.png"]
+    # Firmware pro ESP32 se nebalí do .exe — commit jen do něj nemá co přebalovat.
+    paths-ignore: ["README.md", "NOTICE", "LICENSE", "build/preview-*.png", "firmware/**"]
   # Ruční spuštění funguje jen pro workflow na výchozí větvi; tady je hlavně
   # pro případ, že se projekt přesune do vlastního repozitáře.
   workflow_dispatch:

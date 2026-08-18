@@ -23,8 +23,9 @@
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
     "src/shared/**/*.ts",
-    // state.ts je čistá prezentační logika bez DOM — testuje se v node prostředí
+    // Čistá logika bez DOM — testuje se v node prostředí
     "src/renderer/state.ts",
+    "src/renderer/serialLink.ts",
     "test/**/*.ts",
     "electron.vite.config.ts",
     "vitest.config.ts"

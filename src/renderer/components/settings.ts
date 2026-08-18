@@ -37,6 +37,7 @@ export function createSettingsView(onChanged: () => void): SettingsView {
   const accountsBox = div('field')
   const suggestionsBox = div('field')
   const optionsBox = div('field')
+  const displayBox = div('field')
   const diagBox = div('field')
 
   root.append(
@@ -49,6 +50,7 @@ export function createSettingsView(onChanged: () => void): SettingsView {
     accountsBox,
     suggestionsBox,
     optionsBox,
+    displayBox,
     diagBox,
   )
 
@@ -211,6 +213,54 @@ export function createSettingsView(onChanged: () => void): SettingsView {
     optionsBox.append(caField)
   }
 
+  async function renderDisplay(): Promise<void> {
+    displayBox.textContent = ''
+    displayBox.append(div('t-subtitle2', 'Externí displej'))
+
+    const { serialLink } = await import('../main')
+    const { isSupported } = await import('../serialLink')
+
+    if (!isSupported()) {
+      displayBox.append(div('muted t-caption2', 'Web Serial není v tomto sestavení dostupný.'))
+      return
+    }
+
+    const status = serialLink.getStatus()
+    const label =
+      status === 'connected'
+        ? 'Připojeno'
+        : status === 'connecting'
+          ? 'Připojuji…'
+          : status === 'error'
+            ? 'Chyba spojení'
+            : 'Nepřipojeno'
+    displayBox.append(div('muted t-caption2', `Stav: ${label}`))
+
+    const row = div('btnrow')
+    if (status === 'connected') {
+      const disconnect = button('Odpojit')
+      disconnect.addEventListener('click', () => {
+        void serialLink.disconnect().then(renderDisplay)
+      })
+      row.append(disconnect)
+    } else {
+      const connect = button('Připojit displej', 'btn primary')
+      connect.addEventListener('click', () => {
+        void serialLink.connect().then(renderDisplay)
+      })
+      row.append(connect)
+    }
+    displayBox.append(row)
+
+    displayBox.append(
+      div(
+        'muted t-disclaimer',
+        'Zapoj ESP32 přes USB a vyber jeho port. Data se posílají při každém ' +
+          'obnovení; odpočet si deska tiká sama, takže jede i bez počítače.',
+      ),
+    )
+  }
+
   function renderDiagnostics(): void {
     diagBox.textContent = ''
     const row = div('btnrow')
@@ -240,6 +290,7 @@ export function createSettingsView(onChanged: () => void): SettingsView {
     await renderAccounts()
     await renderSuggestions()
     await renderOptions()
+    await renderDisplay()
     renderDiagnostics()
   }
 
