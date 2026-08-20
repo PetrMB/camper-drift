@@ -21,6 +21,12 @@ win:
       arch: [x64]
     - target: portable
       arch: [x64]
+    # ZIP je rozbalená aplikace bez jakéhokoli samorozbalovacího obalu.
+    # Portable .exe je 7z SFX, který se při každém spuštění rozbalí do %TEMP%
+    # a odtud se spustí — a přesně tenhle vzorec je pro firemní EDR podezřelý.
+    # ZIP tenhle problém nemá: rozbalíš jednou a spouštíš normální .exe.
+    - target: zip
+      arch: [x64]
   icon: build/icon.ico
 nsis:
   oneClick: true

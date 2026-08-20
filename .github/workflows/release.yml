@@ -40,9 +40,11 @@ jobs:
       - name: Výpis výsledků
         shell: pwsh
         run: |
-          Get-ChildItem release -File -Filter *.exe |
-            Select-Object Name, @{n = 'MB'; e = { [math]::Round($_.Length / 1MB, 1) } } |
-            Format-Table -AutoSize
+          Get-ChildItem release -File -Include *.exe, *.zip -Recurse |
+            Select-Object Name,
+              @{n = 'MB'; e = { [math]::Round($_.Length / 1MB, 1) } },
+              @{n = 'SHA256'; e = { (Get-FileHash $_.FullName -Algorithm SHA256).Hash } } |
+            Format-List
 
       # Artefakt slouží jako záloha, když by publikace release neprošla.
       - uses: actions/upload-artifact@v4
@@ -50,6 +52,7 @@ jobs:
           name: ClaudeMonitor-windows
           path: |
             release/*.exe
+            release/*.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -78,7 +81,7 @@ jobs:
 
           # Předchozí release stejné verze nahradíme, ať odkaz zůstává stabilní.
           gh release delete $tag --yes --cleanup-tag 2>$null
-          gh release create $tag (Get-ChildItem release/*.exe).FullName `
+          gh release create $tag (Get-ChildItem release/*.exe, release/*.zip).FullName `
             --title "ClaudeMonitor $version" `
             --notes $notes `
             --target $env:GITHUB_SHA
